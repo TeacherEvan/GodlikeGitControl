@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>God's Git-Control</title>
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0D0D0D">
+</head>
+<body>
+    <!-- Toast Notifications Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- 1. Cinematic Splash Screen -->
+    <section id="splash-screen" class="view active">
+        <div class="stars-bg" id="stars-container"></div>
+        <div class="splash-content">
+            <div class="gold-crest-container">
+                <svg class="gold-crest" viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="45" stroke="url(#gold-grad)" stroke-width="2" fill="none" stroke-dasharray="283" stroke-dashoffset="283" class="crest-circle" />
+                    <path d="M 50 15 C 38 15 28 25 28 37 C 28 45 32 50 38 53 L 42 75 L 58 75 L 62 53 C 68 50 72 45 72 37 C 72 25 62 15 50 15 Z" fill="none" stroke="url(#gold-grad)" stroke-width="1.5" stroke-dasharray="200" stroke-dashoffset="200" class="crest-shield" />
+                    <text x="50" y="44" font-family="'Cinzel', serif" font-weight="900" font-size="24" fill="url(#gold-grad)" text-anchor="middle" class="crest-text">G</text>
+                    <defs>
+                        <linearGradient id="gold-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="#FFE082" />
+                            <stop offset="50%" stop-color="#FFB300" />
+                            <stop offset="100%" stop-color="#B8860B" />
+                        </linearGradient>
+                    </defs>
+                </svg>
+            </div>
+            <h1 class="welcome-title">Welcome to God's Git-Control</h1>
+            <p class="welcome-subtitle">A Stoic Interface for Git & Hardware Mastery</p>
+            <div class="proceed-hint clickable" id="btn-proceed">
+                <span>Click to Proceed</span>
+                <div class="gold-pulse-ring"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- App Shell (Dashboard + Views) -->
+    <main id="app-shell" class="hidden">
+        <!-- App Header -->
+        <header class="app-header">
+            <div class="header-left">
+                <span class="header-logo">GGC</span>
+            </div>
+            <div class="header-center">
+                <span class="header-title">God's Git-Control</span>
+            </div>
+            <div class="header-right">
+                <button class="icon-btn" id="btn-home" title="Go to Dashboard">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                        <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
+                    </svg>
+                </button>
+            </div>
+        </header>
+
+        <!-- 2. Main Dashboard -->
+        <section id="main-dashboard" class="view-panel active">
+            <div class="dashboard-hero">
+                <h2>Select Operation</h2>
+                <p>Begin tracking configurations and metrics across your system.</p>
+            </div>
+            <div class="menu-cards">
+                <button class="menu-card clickable" id="btn-scan-menu">
+                    <div class="card-glow"></div>
+                    <div class="card-icon">
+                        <svg viewBox="0 0 24 24" width="40" height="40" fill="currentColor">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H7c0-2.76 2.24-5 5-5s5 2.24 5 5c0 1.04-.42 1.99-1.07 2.75z"/>
+                        </svg>
+                    </div>
+                    <h3>Scan System</h3>
+                    <p>Scans directories and discovers all local Git repositories on this machine.</p>
+                </button>
+
+                <button class="menu-card clickable" id="btn-location-menu">
+                    <div class="card-glow"></div>
+                    <div class="card-icon">
+                        <svg viewBox="0 0 24 24" width="40" height="40" fill="currentColor">
+                            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                        </svg>
+                    </div>
+                    <h3>Go to Location</h3>
+                    <p>Directly browse files or specify a repository folder path.</p>
+                </button>
+
+                <button class="menu-card clickable" id="btn-hardware-menu">
+                    <div class="card-glow"></div>
+                    <div class="card-icon">
+                        <svg viewBox="0 0 24 24" width="40" height="40" fill="currentColor">
+                            <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/>
+                        </svg>
+                    </div>
+                    <h3>Hardware Scan</h3>
+                    <p>Track real-time system resources including CPU, RAM, and Disk performance.</p>
+                </button>
+            </div>
+        </section>
+
+        <!-- 3. Scan System View -->
+        <section id="scan-view" class="view-panel hidden">
+            <div class="panel-header">
+                <button class="back-btn" id="btn-scan-back">← Back</button>
+                <h2>Scan Directory</h2>
+            </div>
+            <div class="form-group">
+                <label for="scan-path-input">Scan Starting Path</label>
+                <div class="input-row">
+                    <input type="text" id="scan-path-input" placeholder="/home/user">
+                    <button class="gold-btn" id="btn-start-scan">Scan</button>
+                </div>
+            </div>
+
+            <div class="scan-status hidden" id="scan-loader">
+                <div class="spinner"></div>
+                <p>Searching directories for active repositories...</p>
+            </div>
+
+            <div class="results-container hidden" id="scan-results-section">
+                <h3>Discovered Repositories (<span id="repo-count">0</span>)</h3>
+                <div class="repo-list" id="repo-list">
+                    <!-- Dynamic scan items -->
+                </div>
+            </div>
+        </section>
+
+        <!-- 4. Go to Location / File Browser View -->
+        <section id="location-view" class="view-panel hidden">
+            <div class="panel-header">
+                <button class="back-btn" id="btn-location-back">← Back</button>
+                <h2>File Location</h2>
+            </div>
+            
+            <div class="form-group">
+                <label for="location-path-input">Repository Path</label>
+                <div class="input-row">
+                    <input type="text" id="location-path-input" placeholder="/home/user/my-repo">
+                    <button class="gold-btn" id="btn-open-path">Open</button>
+                </div>
+            </div>
+
+            <div class="path-browser">
+                <div class="browser-header">
+                    <span class="curr-path" id="browser-current-path">/</span>
+                    <button class="up-btn" id="btn-browser-up">↑ Up</button>
+                </div>
+                <div class="browser-list" id="browser-list">
+                    <!-- Dynamic directory browser items -->
+                </div>
+            </div>
+        </section>
+
+        <!-- 5. Repository Git Status View (Core Panel) -->
+        <section id="status-view" class="view-panel hidden">
+            <div class="panel-header status-header-layout">
+                <div class="header-title-section">
+                    <button class="back-btn" id="btn-status-back">← Exit Repo</button>
+                    <h2 id="repo-title">Repository</h2>
+                    <span class="path-sub" id="repo-path-display">/home/user/project</span>
+                </div>
+                <button class="refresh-btn" id="btn-status-refresh" title="Refresh Status">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                        <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                    </svg>
+                </button>
+            </div>
+
+            <div class="status-summary-bar">
+                <div class="badge branch-badge" id="status-branch">main</div>
+                <div class="sync-status" id="status-sync">Repository Loaded</div>
+            </div>
+
+            <!-- Staged changes list -->
+            <div class="section-card index-card">
+                <div class="section-card-header">
+                    <h3>Staged Files</h3>
+                    <span class="count-badge green-badge" id="staged-count">0</span>
+                </div>
+                <div class="file-list" id="staged-file-list">
+                    <p class="empty-msg">No files staged for commit.</p>
+                </div>
+            </div>
+
+            <!-- Unstaged changes list -->
+            <div class="section-card index-card">
+                <div class="section-card-header">
+                    <h3>Modified Files</h3>
+                    <span class="count-badge yellow-badge" id="unstaged-count">0</span>
+                </div>
+                <div class="file-list" id="unstaged-file-list">
+                    <p class="empty-msg">No unstaged changes.</p>
+                </div>
+            </div>
+
+            <!-- Untracked changes list -->
+            <div class="section-card index-card">
+                <div class="section-card-header">
+                    <h3>Untracked Files</h3>
+                    <span class="count-badge grey-badge" id="untracked-count">0</span>
+                </div>
+                <div class="file-list" id="untracked-file-list">
+                    <p class="empty-msg">No untracked files.</p>
+                </div>
+            </div>
+
+            <!-- Action buttons -->
+            <div class="status-action-bar">
+                <button class="gold-btn large-btn" id="btn-open-commit-panel">Commit Staged</button>
+            </div>
+
+            <!-- Commit History Logs list -->
+            <div class="section-card logs-card">
+                <div class="section-card-header">
+                    <h3>Commit History</h3>
+                </div>
+                <div class="commit-logs" id="commit-logs-list">
+                    <!-- Dynamic logs -->
+                </div>
+            </div>
+        </section>
+
+        <!-- 6. Diff Viewer Section (Side/Full panel) -->
+        <section id="diff-view" class="view-panel hidden">
+            <div class="panel-header">
+                <button class="back-btn" id="btn-diff-back">← Back to Status</button>
+                <h2 id="diff-filename">diff/file.txt</h2>
+            </div>
+            <div class="diff-container">
+                <pre class="diff-code" id="diff-content-pre">No diff available.</pre>
+            </div>
+        </section>
+
+        <!-- 7. Hardware Scan View -->
+        <section id="hardware-view" class="view-panel hidden">
+            <div class="panel-header">
+                <button class="back-btn" id="btn-hardware-back">← Back</button>
+                <h2>System Hardware Scan</h2>
+            </div>
+
+            <div class="hardware-grid">
+                <!-- Circular Gauges Card -->
+                <div class="section-card gauge-card">
+                    <div class="section-card-header">
+                        <h3>Resource Load</h3>
+                    </div>
+                    <div class="gauges-row">
+                        <!-- CPU Circle -->
+                        <div class="radial-gauge-container">
+                            <svg class="radial-gauge" viewBox="0 0 36 36">
+                                <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="2.5" />
+                                <path id="cpu-circle" class="circle-fg" stroke-dasharray="0, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="url(#gold-grad-radial)" stroke-width="2.5" />
+                                <defs>
+                                    <linearGradient id="gold-grad-radial" x1="0%" y1="100%" x2="0%" y2="0%">
+                                        <stop offset="0%" stop-color="#FFD700" />
+                                        <stop offset="100%" stop-color="#B8860B" />
+                                    </linearGradient>
+                                </defs>
+                            </svg>
+                            <div class="gauge-percentage"><span id="cpu-pct-val">0</span>%</div>
+                            <div class="gauge-label">CPU</div>
+                        </div>
+
+                        <!-- RAM Circle -->
+                        <div class="radial-gauge-container">
+                            <svg class="radial-gauge" viewBox="0 0 36 36">
+                                <path class="circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="2.5" />
+                                <path id="ram-circle" class="circle-fg" stroke-dasharray="0, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="url(#gold-grad-radial)" stroke-width="2.5" />
+                            </svg>
+                            <div class="gauge-percentage"><span id="ram-pct-val">0</span>%</div>
+                            <div class="gauge-label">RAM</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Canvas Performance Charts -->
+                <div class="section-card chart-card">
+                    <div class="section-card-header">
+                        <h3>CPU History</h3>
+                    </div>
+                    <canvas id="cpu-history-chart" width="300" height="100" class="canvas-chart"></canvas>
+                </div>
+
+                <div class="section-card chart-card">
+                    <div class="section-card-header">
+                        <h3>RAM History</h3>
+                    </div>
+                    <canvas id="ram-history-chart" width="300" height="100" class="canvas-chart"></canvas>
+                </div>
+
+                <!-- Storage Info -->
+                <div class="section-card">
+                    <div class="section-card-header">
+                        <h3>Mounted Disks</h3>
+                    </div>
+                    <div id="disk-list" class="disk-list">
+                        <!-- Dynamic disk items -->
+                    </div>
+                </div>
+
+                <!-- System Info Card -->
+                <div class="section-card">
+                    <div class="section-card-header">
+                        <h3>System Configuration</h3>
+                    </div>
+                    <div class="sys-info-table">
+                        <div class="sys-info-row">
+                            <span class="label">OS Platform:</span>
+                            <span class="value" id="sys-os">-</span>
+                        </div>
+                        <div class="sys-info-row">
+                            <span class="label">Kernel Release:</span>
+                            <span class="value" id="sys-release">-</span>
+                        </div>
+                        <div class="sys-info-row">
+                            <span class="label">Architecture:</span>
+                            <span class="value" id="sys-arch">-</span>
+                        </div>
+                        <div class="sys-info-row">
+                            <span class="label">System Uptime:</span>
+                            <span class="value" id="sys-uptime">-</span>
+                        </div>
+                        <div class="sys-info-row">
+                            <span class="label">CPU Type:</span>
+                            <span class="value" id="sys-cpu-model">-</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 8. Commit Modal Overlay -->
+        <div id="commit-modal" class="modal-overlay hidden">
+            <div class="modal-card">
+                <div class="modal-header">
+                    <h3>Create Commit</h3>
+                    <button class="close-btn" id="btn-close-commit">✕</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="commit-message-input">Commit Message</label>
+                        <textarea id="commit-message-input" placeholder="Type commit message here..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="cancel-btn" id="btn-cancel-commit">Cancel</button>
+                    <button class="gold-btn" id="btn-submit-commit">Commit</button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- PWA Registration & Scripts -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(reg => console.log('Service Worker registered successfully'))
+                    .catch(err => console.error('Service Worker registration failed:', err));
+            });
+        }
+    </script>
+    <script src="js/api.js"></script>
+    <script src="js/toast.js"></script>
+    <script src="js/splash.js"></script>
+    <script src="js/dashboard.js"></script>
+    <script src="js/scan.js"></script>
+    <script src="js/location.js"></script>
+    <script src="js/status.js"></script>
+    <script src="js/diff.js"></script>
+    <script src="js/commit.js"></script>
+    <script src="js/hardware.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>

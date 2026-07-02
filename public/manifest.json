@@ -1,0 +1,16 @@
+{
+  "name": "God's Git-Control",
+  "short_name": "GodsGit",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0D0D0D",
+  "theme_color": "#0D0D0D",
+  "description": "A Stoic, Gold themed Git and Hardware controller app",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
