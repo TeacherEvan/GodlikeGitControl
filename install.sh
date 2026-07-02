@@ -16,13 +16,13 @@ if ! command -v python3 &> /dev/null; then
     exit 1
 fi
 
-# 2. Install dependencies via pip
-echo "[+] Installing system dependencies (dulwich, psutil)..."
-python3 -m pip install --user --break-system-packages dulwich psutil || {
+# 2. Install dependencies via pip (adding pywebview for native window wrapper)
+echo "[+] Installing system dependencies (dulwich, psutil, pywebview)..."
+python3 -m pip install --user --break-system-packages dulwich psutil pywebview || {
     echo "[!] Standard pip install failed, attempting local venv fallback..."
     python3 -m venv venv
     source venv/bin/activate
-    pip install dulwich psutil
+    pip install dulwich psutil pywebview
 }
 
 # 3. Setup Systemd Service (in writable snap-local $HOME)
@@ -77,6 +77,6 @@ echo "================================================="
 echo " Installation Complete!"
 echo "================================================="
 echo "The application is ready."
-echo "You can launch the app from your Desktop or Applications menu,"
-echo "or open http://localhost:3002 in your browser."
+echo "You can launch the app directly as a standalone window"
+echo "from your Desktop launcher or system Applications menu."
 echo "================================================="

@@ -1,7 +1,7 @@
 [Desktop Entry]
 Name=God's Git-Control
 Comment=Stoic Git & Hardware System Controller
-Exec=xdg-open http://localhost:3002
+Exec=python3 /home/ewaldt/Documents/VS/Other/GodlikeGitControl/app_window.py
 Icon=utilities-system-monitor
 Terminal=false
 Type=Application
