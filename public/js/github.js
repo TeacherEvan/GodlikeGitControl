@@ -89,7 +89,7 @@ const GitHubController = {
                 }
             });
         }
-    }
+    },
 
     openModal() {
         const modal = document.getElementById("github-modal");
