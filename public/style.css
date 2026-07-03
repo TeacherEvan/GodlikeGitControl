@@ -1133,3 +1133,222 @@ textarea {
     word-break: break-all;
 }
 
+/* --- GitHub Integration UI Styling --- */
+
+/* Header Status & Avatar */
+.avatar-badge-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.github-avatar-img {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 1px solid var(--gold-primary);
+    object-fit: cover;
+    box-shadow: 0 0 4px var(--gold-dim);
+}
+.online-indicator {
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    width: 8px;
+    height: 8px;
+    background-color: var(--color-added);
+    border: 1.5px solid var(--bg-deep);
+    border-radius: 50%;
+}
+
+/* GitHub Sync Panel Card */
+.github-sync-card {
+    border: 1px solid rgba(212, 175, 55, 0.35);
+    background: radial-gradient(circle at top right, rgba(212, 175, 55, 0.05), var(--bg-card) 65%) !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), 0 0 10px rgba(212, 175, 55, 0.05);
+}
+.sync-desc-msg {
+    margin: 8px 0 14px 0;
+    font-size: 12px;
+    line-height: 1.5;
+}
+.remote-link-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    margin-bottom: 14px;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.03);
+}
+.remote-link-row .label {
+    color: var(--text-secondary);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+.gold-link {
+    color: var(--gold-primary);
+    text-decoration: none;
+    transition: var(--transition-smooth);
+}
+.gold-link:hover {
+    color: var(--gold-bright);
+    text-decoration: underline;
+}
+.github-ops-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+.publish-box-layout {
+    margin-top: 10px;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 14px;
+    border-radius: 6px;
+    border: 1px solid var(--border-gold);
+}
+.publish-box-layout h4 {
+    font-family: var(--font-heading);
+    font-size: 13px;
+    color: var(--gold-bright);
+    margin-bottom: 12px;
+}
+
+/* Issues & PRs Tabs & Lists */
+.issues-prs-tabs {
+    display: flex;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    margin-top: 16px;
+    margin-bottom: 10px;
+}
+.tab-btn {
+    flex: 1;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 8px 0;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: var(--transition-smooth);
+    font-weight: 600;
+}
+.tab-btn.active {
+    color: var(--gold-primary);
+    border-bottom-color: var(--gold-primary);
+}
+.tab-content {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 160px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+.issue-pr-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.01);
+    padding: 8px;
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.02);
+    transition: var(--transition-smooth);
+}
+.issue-pr-item:hover {
+    background: rgba(255, 255, 255, 0.03);
+    border-color: rgba(212, 175, 55, 0.15);
+}
+.issue-pr-number {
+    color: var(--gold-dim);
+    font-size: 11px;
+    font-weight: bold;
+}
+.issue-pr-title-wrapper {
+    flex: 1;
+    overflow: hidden;
+}
+.issue-pr-title {
+    font-size: 11.5px;
+    color: var(--text-primary);
+    text-decoration: none;
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.issue-pr-title:hover {
+    color: var(--gold-bright);
+    text-decoration: underline;
+}
+.issue-pr-meta {
+    font-size: 9.5px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
+
+/* Scope verification lines */
+.scopes-list {
+    background: rgba(0, 0, 0, 0.2);
+    padding: 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.03);
+}
+.scope-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 11px;
+    padding: 4px 0;
+}
+.scope-check {
+    font-weight: bold;
+    width: 14px;
+    height: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-size: 9px;
+}
+.scope-item.active .scope-check {
+    background: rgba(76, 175, 80, 0.2);
+    color: var(--color-added);
+}
+.scope-item.missing .scope-check {
+    background: rgba(244, 67, 54, 0.2);
+    color: var(--color-deleted);
+}
+.scope-item.missing .scope-label {
+    color: var(--text-secondary);
+    text-decoration: line-through;
+}
+
+/* Helper utilities */
+.flex-align-center { display: flex; align-items: center; }
+.justify-center { justify-content: center; }
+.margin-right-6 { margin-right: 6px; }
+.margin-right-8 { margin-right: 8px; }
+.margin-top-10 { margin-top: 10px; }
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.destructive-btn:hover {
+    background: rgba(244, 67, 54, 0.1) !important;
+}
+.text-gold {
+    color: var(--gold-primary) !important;
+}
+.tab-content::-webkit-scrollbar {
+    width: 4px;
+}
+.tab-content::-webkit-scrollbar-thumb {
+    background: var(--border-gold);
+    border-radius: 2px;
+}
+
+

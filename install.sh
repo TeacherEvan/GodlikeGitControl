@@ -30,6 +30,11 @@ echo "[+] Configuring systemd user service..."
 SYSTEMD_DIR="$HOME/.config/systemd/user"
 mkdir -p "$SYSTEMD_DIR"
 
+PYTHON_EXEC="/usr/bin/python3"
+if [ -d "venv" ]; then
+    PYTHON_EXEC="$(pwd)/venv/bin/python3"
+fi
+
 cat <<EOF > "$SYSTEMD_DIR/gods-git-control.service"
 [Unit]
 Description=God's Git-Control Server Backend
@@ -38,7 +43,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=$(pwd)
-ExecStart=/usr/bin/python3 $(pwd)/server.py
+ExecStart=$PYTHON_EXEC $(pwd)/server.py
 Restart=on-failure
 
 [Install]
@@ -56,14 +61,19 @@ echo "[+] Installing Application Menu Launcher..."
 DESKTOP_DIR="$HOME/.local/share/applications"
 mkdir -p "$DESKTOP_DIR"
 
-cp gods-git-control.desktop "$DESKTOP_DIR/"
+WINDOW_PYTHON_EXEC="python3"
+if [ -d "venv" ]; then
+    WINDOW_PYTHON_EXEC="$(pwd)/venv/bin/python3"
+fi
+
+sed "s|Exec=.*|Exec=$WINDOW_PYTHON_EXEC $(pwd)/app_window.py|g" gods-git-control.desktop > "$DESKTOP_DIR/gods-git-control.desktop"
 chmod +x "$DESKTOP_DIR/gods-git-control.desktop"
 echo "[+] Application Menu Launcher added."
 
 # 5. Install Desktop Screen Shortcut (in real user Desktop directory)
 if [ -d "$REAL_DESKTOP" ]; then
     echo "[+] Creating Desktop Screen Shortcut..."
-    cp gods-git-control.desktop "$REAL_DESKTOP/"
+    sed "s|Exec=.*|Exec=$WINDOW_PYTHON_EXEC $(pwd)/app_window.py|g" gods-git-control.desktop > "$REAL_DESKTOP/gods-git-control.desktop"
     chmod +x "$REAL_DESKTOP/gods-git-control.desktop"
     
     # Try to mark the launcher trusted under GNOME desktop environment

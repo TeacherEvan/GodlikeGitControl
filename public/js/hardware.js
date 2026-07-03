@@ -157,15 +157,21 @@ const HardwareMonitor = {
             const totalGB = (disk.total / (1024 ** 3)).toFixed(1);
             const usedGB = (disk.used / (1024 ** 3)).toFixed(1);
             
+            const escapedMount = escapeHtml(disk.mountpoint);
+            const escapedFs = escapeHtml(disk.fstype);
+            const escapedPercent = escapeHtml(disk.percent);
+            const escapedUsedGB = escapeHtml(usedGB);
+            const escapedTotalGB = escapeHtml(totalGB);
+
             const item = document.createElement("div");
             item.className = "disk-item";
             item.innerHTML = `
                 <div class="disk-meta">
-                    <span class="disk-name">${disk.mountpoint} (${disk.fstype})</span>
-                    <span>${usedGB} GB / ${totalGB} GB (${disk.percent}%)</span>
+                    <span class="disk-name">${escapedMount} (${escapedFs})</span>
+                    <span>${escapedUsedGB} GB / ${escapedTotalGB} GB (${escapedPercent}%)</span>
                 </div>
                 <div class="progress-bar-bg">
-                    <div class="progress-bar-fg" style="width: ${disk.percent}%"></div>
+                    <div class="progress-bar-fg" style="width: ${escapedPercent}%"></div>
                 </div>
             `;
             this.diskList.appendChild(item);

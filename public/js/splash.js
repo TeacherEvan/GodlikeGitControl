@@ -53,6 +53,12 @@ const Splash = {
         };
 
         this.proceedBtn.addEventListener("click", proceed);
+        this.proceedBtn.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                proceed();
+            }
+        });
         this.screen.addEventListener("click", (e) => {
             // Allow clicking anywhere to skip
             if (e.target !== this.proceedBtn && !this.proceedBtn.contains(e.target)) {

@@ -1,14 +1,3 @@
-// HTML Escaping Utility for XSS Prevention
-function escapeHtml(unsafe) {
-    if (unsafe === undefined || unsafe === null) return "";
-    return String(unsafe)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-}
-
 const StatusView = {
     panel: null,
     backBtn: null,
@@ -80,6 +69,109 @@ const StatusView = {
         this.commitPanelBtn.addEventListener("click", () => {
             CommitPanel.open();
         });
+
+        // GitHub Operation Bindings
+        const pushBtn = document.getElementById("btn-github-push");
+        if (pushBtn) {
+            pushBtn.addEventListener("click", async () => {
+                this.setUILocked(true);
+                Toast.info("Pushing to GitHub...");
+                try {
+                    await API.gitHubPush(this.currentRepoPath);
+                    Toast.success("Successfully pushed to GitHub!");
+                    this.checkGitHubSyncStatus();
+                    this.refresh();
+                } catch (err) {
+                    Toast.error(err.message || "Failed to push.");
+                } finally {
+                    this.setUILocked(false);
+                }
+            });
+        }
+
+        const pullBtn = document.getElementById("btn-github-pull");
+        if (pullBtn) {
+            pullBtn.addEventListener("click", async () => {
+                this.setUILocked(true);
+                Toast.info("Pulling from GitHub...");
+                try {
+                    await API.gitHubPull(this.currentRepoPath);
+                    Toast.success("Successfully pulled from GitHub!");
+                    this.checkGitHubSyncStatus();
+                    this.refresh();
+                } catch (err) {
+                    Toast.error(err.message || "Failed to pull.");
+                } finally {
+                    this.setUILocked(false);
+                }
+            });
+        }
+
+        const pubTrigger = document.getElementById("btn-github-publish-trigger");
+        if (pubTrigger) {
+            pubTrigger.addEventListener("click", () => {
+                document.getElementById("github-unlinked-view").classList.add("hidden");
+                const form = document.getElementById("github-publish-form");
+                form.classList.remove("hidden");
+                document.getElementById("github-publish-name").value = this.repoTitle.textContent;
+            });
+        }
+
+        const pubCancel = document.getElementById("btn-github-publish-cancel");
+        if (pubCancel) {
+            pubCancel.addEventListener("click", () => {
+                document.getElementById("github-publish-form").classList.add("hidden");
+                document.getElementById("github-unlinked-view").classList.remove("hidden");
+            });
+        }
+
+        const pubSubmit = document.getElementById("btn-github-publish-submit");
+        if (pubSubmit) {
+            pubSubmit.addEventListener("click", async () => {
+                const name = document.getElementById("github-publish-name").value.trim();
+                const isPrivate = document.getElementById("github-publish-private").checked;
+                if (!name) {
+                    Toast.error("Repository name is required.");
+                    return;
+                }
+                this.setUILocked(true);
+                Toast.info("Publishing repo to GitHub...");
+                try {
+                    await API.gitHubPublish(this.currentRepoPath, name, isPrivate);
+                    Toast.success("Repository successfully published!");
+                    document.getElementById("github-publish-form").classList.add("hidden");
+                    this.checkGitHubRemote();
+                } catch (err) {
+                    Toast.error(err.message || "Failed to publish.");
+                } finally {
+                    this.setUILocked(false);
+                }
+            });
+        }
+
+        const signinTrigger = document.getElementById("btn-github-signin-link-trigger");
+        if (signinTrigger) {
+            signinTrigger.addEventListener("click", () => {
+                GitHubController.openModal();
+            });
+        }
+
+        const tabPrs = document.getElementById("tab-btn-prs");
+        const tabIssues = document.getElementById("tab-btn-issues");
+        if (tabPrs && tabIssues) {
+            tabPrs.addEventListener("click", () => {
+                tabPrs.classList.add("active");
+                tabIssues.classList.remove("active");
+                document.getElementById("github-prs-list").classList.remove("hidden");
+                document.getElementById("github-issues-list").classList.add("hidden");
+            });
+            tabIssues.addEventListener("click", () => {
+                tabIssues.classList.add("active");
+                tabPrs.classList.remove("active");
+                document.getElementById("github-issues-list").classList.remove("hidden");
+                document.getElementById("github-prs-list").classList.add("hidden");
+            });
+        }
     },
 
     startAutoRefresh() {
@@ -103,6 +195,7 @@ const StatusView = {
         
         this.show();
         this.refresh();
+        this.checkGitHubRemote();
     },
 
     // UI Lock helper (resolves lack of UI lock finding)
@@ -164,6 +257,7 @@ const StatusView = {
             }
 
             await this.loadCommitLog();
+            this.checkGitHubRemote();
 
             if (!isSilent) {
                 Toast.success("Status updated");
@@ -347,6 +441,151 @@ const StatusView = {
 
         } catch (e) {
             this.commitLogsList.innerHTML = `<p class="empty-msg">Error loading commits: ${e.message}</p>`;
+        }
+    },
+
+    async checkGitHubRemote() {
+        const syncSection = document.getElementById("github-sync-section");
+        const unlinkedView = document.getElementById("github-unlinked-view");
+        const linkedView = document.getElementById("github-linked-view");
+        const syncBadge = document.getElementById("github-sync-badge");
+
+        if (!this.currentRepoPath) return;
+
+        try {
+            const data = await API.getGitHubRemote(this.currentRepoPath);
+            if (data.success && data.hasRemote && data.isGitHub) {
+                syncSection.classList.remove("hidden");
+                unlinkedView.classList.add("hidden");
+                linkedView.classList.remove("hidden");
+
+                const remoteLink = document.getElementById("github-remote-link");
+                remoteLink.href = data.remoteUrl;
+                remoteLink.textContent = `${data.owner}/${data.repo}`;
+
+                const opsSignedIn = document.getElementById("github-ops-signed-in");
+                const opsSignedOut = document.getElementById("github-ops-signed-out");
+
+                if (GitHubController.isAuthenticated) {
+                    opsSignedIn.classList.remove("hidden");
+                    opsSignedOut.classList.add("hidden");
+                    this.checkGitHubSyncStatus();
+                    this.loadGitHubIssuesPRs();
+                } else {
+                    opsSignedIn.classList.add("hidden");
+                    opsSignedOut.classList.remove("hidden");
+                    syncBadge.textContent = "Sign in to sync";
+                    syncBadge.className = "badge branch-badge";
+                    document.getElementById("github-issues-prs-section").classList.add("hidden");
+                }
+            } else if (data.success && !data.hasRemote) {
+                syncSection.classList.remove("hidden");
+                unlinkedView.classList.remove("hidden");
+                linkedView.classList.add("hidden");
+                syncBadge.textContent = "Unlinked";
+                syncBadge.className = "badge branch-badge";
+                document.getElementById("github-issues-prs-section").classList.add("hidden");
+            } else {
+                syncSection.classList.add("hidden");
+            }
+        } catch (error) {
+            console.error("Error checking GitHub remote:", error);
+            syncSection.classList.add("hidden");
+        }
+    },
+
+    async checkGitHubSyncStatus() {
+        const syncBadge = document.getElementById("github-sync-badge");
+        try {
+            const response = await API.getGitHubSyncStatus(this.currentRepoPath);
+            if (response.success && response.sync) {
+                const s = response.sync;
+                syncBadge.textContent = s.status;
+                
+                if (s.status === "Synced") {
+                    syncBadge.className = "badge branch-badge text-gold";
+                    syncBadge.style.borderColor = "var(--gold-primary)";
+                    syncBadge.style.background = "rgba(212, 175, 55, 0.1)";
+                    syncBadge.textContent = "Synced";
+                } else if (s.status === "Ahead") {
+                    syncBadge.className = "badge branch-badge";
+                    syncBadge.style.borderColor = "var(--color-added)";
+                    syncBadge.style.background = "rgba(76, 175, 80, 0.1)";
+                    syncBadge.textContent = `Ahead by ${s.count}`;
+                } else if (s.status === "Behind") {
+                    syncBadge.className = "badge branch-badge";
+                    syncBadge.style.borderColor = "var(--color-modified)";
+                    syncBadge.style.background = "rgba(255, 193, 7, 0.1)";
+                    syncBadge.textContent = `Behind by ${s.count}`;
+                } else if (s.status === "Diverged") {
+                    syncBadge.className = "badge branch-badge";
+                    syncBadge.style.borderColor = "var(--color-deleted)";
+                    syncBadge.style.background = "rgba(244, 67, 54, 0.1)";
+                    syncBadge.textContent = "Diverged";
+                } else {
+                    syncBadge.className = "badge branch-badge";
+                    syncBadge.style.borderColor = "var(--border-gold)";
+                    syncBadge.style.background = "transparent";
+                    syncBadge.textContent = s.status;
+                }
+            }
+        } catch (error) {
+            console.error("Error checking sync status:", error);
+            syncBadge.textContent = "Error";
+        }
+    },
+
+    async loadGitHubIssuesPRs() {
+        const issuesPrsSection = document.getElementById("github-issues-prs-section");
+        const prsList = document.getElementById("github-prs-list");
+        const issuesList = document.getElementById("github-issues-list");
+
+        try {
+            const data = await API.getGitHubIssuesPRs(this.currentRepoPath);
+            if (data.success) {
+                issuesPrsSection.classList.remove("hidden");
+
+                prsList.innerHTML = "";
+                const prs = data.prs || [];
+                if (prs.length === 0) {
+                    prsList.innerHTML = `<p class="empty-msg" style="padding: 10px 0;">No active PRs found.</p>`;
+                } else {
+                    prs.forEach(pr => {
+                        const item = document.createElement("div");
+                        item.className = "issue-pr-item";
+                        item.innerHTML = `
+                            <span class="issue-pr-number">#${pr.number}</span>
+                            <div class="issue-pr-title-wrapper">
+                                <a href="${pr.html_url}" target="_blank" class="issue-pr-title">${escapeHtml(pr.title)}</a>
+                                <div class="issue-pr-meta">Opened by @${escapeHtml(pr.user)}</div>
+                            </div>
+                        `;
+                        prsList.appendChild(item);
+                    });
+                }
+
+                issuesList.innerHTML = "";
+                const issues = data.issues || [];
+                if (issues.length === 0) {
+                    issuesList.innerHTML = `<p class="empty-msg" style="padding: 10px 0;">No open issues found.</p>`;
+                } else {
+                    issues.forEach(issue => {
+                        const item = document.createElement("div");
+                        item.className = "issue-pr-item";
+                        item.innerHTML = `
+                            <span class="issue-pr-number">#${issue.number}</span>
+                            <div class="issue-pr-title-wrapper">
+                                <a href="${issue.html_url}" target="_blank" class="issue-pr-title">${escapeHtml(issue.title)}</a>
+                                <div class="issue-pr-meta">Opened by @${escapeHtml(issue.user)}</div>
+                            </div>
+                        `;
+                        issuesList.appendChild(item);
+                    });
+                }
+            }
+        } catch (error) {
+            console.error("Error loading Issues/PRs:", error);
+            issuesPrsSection.classList.add("hidden");
         }
     }
 };

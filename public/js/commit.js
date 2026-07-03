@@ -4,6 +4,7 @@ const CommitPanel = {
     cancelBtn: null,
     submitBtn: null,
     messageInput: null,
+    previousActiveElement: null,
 
     init() {
         this.modal = document.getElementById("commit-modal");
@@ -16,12 +17,17 @@ const CommitPanel = {
     },
 
     open() {
+        this.previousActiveElement = document.activeElement;
         this.messageInput.value = "";
         this.modal.classList.remove("hidden");
+        this.messageInput.focus();
     },
 
     close() {
         this.modal.classList.add("hidden");
+        if (this.previousActiveElement) {
+            this.previousActiveElement.focus();
+        }
     },
 
     bindEvents() {
@@ -30,6 +36,36 @@ const CommitPanel = {
         
         this.submitBtn.addEventListener("click", () => {
             this.performCommit();
+        });
+
+        // Focus trap & escape key handler
+        this.modal.addEventListener("keydown", (e) => {
+            if (e.key === "Tab") {
+                const focusableElements = [
+                    this.closeBtn,
+                    this.messageInput,
+                    this.cancelBtn,
+                    this.submitBtn
+                ];
+                
+                const activeEl = document.activeElement;
+                const first = focusableElements[0];
+                const last = focusableElements[focusableElements.length - 1];
+
+                if (e.shiftKey) { // Shift + Tab
+                    if (activeEl === first || !focusableElements.includes(activeEl)) {
+                        last.focus();
+                        e.preventDefault();
+                    }
+                } else { // Tab
+                    if (activeEl === last || !focusableElements.includes(activeEl)) {
+                        first.focus();
+                        e.preventDefault();
+                    }
+                }
+            } else if (e.key === "Escape") {
+                this.close();
+            }
         });
     },
 

@@ -16,7 +16,16 @@ def start_server():
 if __name__ == "__main__":
     # Start the backend server
     server_proc = start_server()
-    time.sleep(1.2) # Allow backend to fully start on port 3002
+    
+    # Wait for the backend server to start by polling the TCP port (resolves F-07)
+    import socket
+    start_time = time.time()
+    while time.time() - start_time < 5.0:
+        try:
+            with socket.create_connection(("127.0.0.1", 3002), timeout=0.5):
+                break
+        except (ConnectionRefusedError, socket.timeout):
+            time.sleep(0.1)
     
     try:
         # Launch pywebview native window loaded with the local address

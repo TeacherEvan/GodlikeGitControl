@@ -36,7 +36,7 @@
             </div>
             <h1 class="welcome-title">Welcome to God's Git-Control</h1>
             <p class="welcome-subtitle">A Stoic Interface for Git & Hardware Mastery</p>
-            <div class="proceed-hint clickable" id="btn-proceed">
+            <div class="proceed-hint clickable" id="btn-proceed" role="button" tabindex="0" aria-label="Proceed to dashboard">
                 <span>Click to Proceed</span>
                 <div class="gold-pulse-ring"></div>
             </div>
@@ -54,6 +54,11 @@
                 <span class="header-title">God's Git-Control</span>
             </div>
             <div class="header-right">
+                <button class="icon-btn" id="btn-github-header" title="Link GitHub Account" style="margin-right: 8px;">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                        <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
+                    </svg>
+                </button>
                 <button class="icon-btn" id="btn-home" title="Go to Dashboard">
                     <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
                         <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>
@@ -175,6 +180,86 @@
             <div class="status-summary-bar">
                 <div class="badge branch-badge" id="status-branch">main</div>
                 <div class="sync-status" id="status-sync">Repository Loaded</div>
+            </div>
+
+            <!-- GitHub Remote Integration Card -->
+            <div class="section-card github-sync-card hidden" id="github-sync-section">
+                <div class="section-card-header">
+                    <h3 class="flex-align-center">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" class="margin-right-6 text-gold">
+                            <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/>
+                        </svg>
+                        GitHub Sync
+                    </h3>
+                    <span class="badge branch-badge" id="github-sync-badge">Checking remote...</span>
+                </div>
+                
+                <!-- Unlinked view -->
+                <div id="github-unlinked-view" class="hidden">
+                    <p class="empty-msg sync-desc-msg">This repository has no GitHub remote origin configured.</p>
+                    <button class="gold-btn large-btn" id="btn-github-publish-trigger">Publish to GitHub</button>
+                </div>
+
+                <!-- Linked remote info -->
+                <div id="github-linked-view" class="hidden">
+                    <div class="remote-link-row">
+                        <span class="label">Remote URL:</span>
+                        <a href="" id="github-remote-link" target="_blank" class="value gold-link truncate">-</a>
+                    </div>
+                    
+                    <!-- Operations when signed in -->
+                    <div id="github-ops-signed-in" class="github-ops-grid hidden">
+                        <button class="gold-btn flex-align-center justify-center" id="btn-github-push">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" class="margin-right-6">
+                                <path d="M4 12l1.41 1.41L11 7.83V20h2V7.83l5.58 5.59L20 12l-8-8-8 8z"/>
+                            </svg>
+                            Push
+                        </button>
+                        <button class="gold-btn flex-align-center justify-center" id="btn-github-pull">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" class="margin-right-6">
+                                <path d="M20 12l-1.41-1.41L13 16.17V4h-2v12.17L5.59 10.59 4 12l8 8 8-8z"/>
+                            </svg>
+                            Pull
+                        </button>
+                    </div>
+
+                    <!-- Operations when signed out -->
+                    <div id="github-ops-signed-out" class="hidden">
+                        <p class="empty-msg sync-desc-msg">Sign in to GitHub to sync changes and pull logs.</p>
+                        <button class="gold-btn large-btn" id="btn-github-signin-link-trigger">Sign In with GitHub</button>
+                    </div>
+                    
+                    <!-- Issues / PRs lists -->
+                    <div id="github-issues-prs-section" class="hidden">
+                        <div class="issues-prs-tabs">
+                            <button class="tab-btn active" id="tab-btn-prs">Active PRs</button>
+                            <button class="tab-btn" id="tab-btn-issues">Open Issues</button>
+                        </div>
+                        <div class="tab-content" id="github-prs-list">
+                            <!-- Render dynamic PR list -->
+                        </div>
+                        <div class="tab-content hidden" id="github-issues-list">
+                            <!-- Render dynamic Issue list -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Publish form -->
+                <div id="github-publish-form" class="hidden publish-box-layout">
+                    <h4>Publish Repository to GitHub</h4>
+                    <div class="form-group margin-top-10">
+                        <label for="github-publish-name">Repository Name</label>
+                        <input type="text" id="github-publish-name" placeholder="my-awesome-repo">
+                    </div>
+                    <div class="form-group checkbox-group">
+                        <input type="checkbox" id="github-publish-private" class="file-checkbox" checked>
+                        <label for="github-publish-private" class="clickable">Private Repository</label>
+                    </div>
+                    <div class="input-row">
+                        <button class="cancel-btn" id="btn-github-publish-cancel">Cancel</button>
+                        <button class="gold-btn" id="btn-github-publish-submit">Publish</button>
+                    </div>
+                </div>
             </div>
 
             <!-- Staged changes list -->
@@ -354,6 +439,86 @@
                 </div>
             </div>
         </div>
+
+        <!-- 9. GitHub Link Modal Overlay -->
+        <div id="github-modal" class="modal-overlay hidden">
+            <!-- Sign In Panel -->
+            <div class="modal-card" id="github-login-panel">
+                <div class="modal-header">
+                    <h3>Link GitHub Account</h3>
+                    <button class="close-btn" id="btn-close-github-modal">✕</button>
+                </div>
+                <div class="modal-body">
+                    <p class="modal-intro-text">Connect your repository workspace to GitHub for sync and remote management.</p>
+                    <div class="form-group">
+                        <label for="github-token-input">Personal Access Token (PAT)</label>
+                        <div class="input-row">
+                            <input type="password" id="github-token-input" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
+                            <button class="icon-btn shadow-btn" id="btn-toggle-token-visibility" title="Toggle visibility" style="padding: 10px;">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                                    <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <span class="input-hint" style="font-size: 11px; margin-top: 4px; display: block; color: var(--text-secondary);">
+                            Requires <code>repo</code> and <code>read:user</code> scopes. 
+                            <a href="https://github.com/settings/tokens/new?description=GodlikeGitControl&scopes=repo,read:user" target="_blank" class="gold-link" style="color: var(--gold-primary); text-decoration: underline;">Generate token →</a>
+                        </span>
+                    </div>
+                    <div class="form-group checkbox-group" style="flex-direction: row; align-items: center; gap: 8px; margin-top: 12px;">
+                        <input type="checkbox" id="github-remember-checkbox" class="file-checkbox">
+                        <label for="github-remember-checkbox" class="clickable" style="font-size: 12px; color: var(--text-secondary);">Remember me (Save securely on server)</label>
+                    </div>
+                    <div class="scan-status hidden" id="github-auth-loader">
+                        <div class="spinner"></div>
+                        <p>Validating token scopes with GitHub...</p>
+                    </div>
+                    <div class="error-msg-box hidden" id="github-auth-error" style="color: var(--color-deleted); font-size: 12px; margin-top: 10px; background: rgba(244,67,54,0.1); padding: 8px; border-radius: 4px; border: 1px solid rgba(244,67,54,0.2);"></div>
+                </div>
+                <div class="modal-footer">
+                    <button class="cancel-btn" id="btn-cancel-github">Cancel</button>
+                    <button class="gold-btn" id="btn-submit-github">Connect</button>
+                </div>
+            </div>
+
+            <!-- Profile Details Panel -->
+            <div class="modal-card hidden" id="github-profile-panel">
+                <div class="modal-header">
+                    <h3>GitHub Connected</h3>
+                    <button class="close-btn" onclick="GitHubController.closeModal()">✕</button>
+                </div>
+                <div class="modal-body profile-modal-body">
+                    <div class="user-profile-header" style="display: flex; align-items: center; gap: 14px; margin-bottom: 20px;">
+                        <img src="" id="profile-avatar" class="user-avatar-large" alt="Avatar" style="width: 60px; height: 60px; border-radius: 50%; border: 2px solid var(--gold-primary); box-shadow: var(--shadow-gold);">
+                        <div class="user-names">
+                            <h4 id="profile-name" style="font-family: var(--font-heading); color: var(--gold-bright); font-size: 16px;">-</h4>
+                            <span id="profile-username" style="font-size: 12px; color: var(--text-secondary);">@username</span>
+                        </div>
+                    </div>
+                    <p class="user-bio" id="profile-bio" style="font-size: 12px; color: var(--text-secondary); margin-bottom: 16px; font-style: italic;">-</p>
+                    <div class="profile-stats-row" style="display: flex; gap: 12px; margin-bottom: 20px;">
+                        <div class="stat-card" style="flex: 1; background: rgba(255,255,255,0.02); border: 1px solid var(--border-gold); border-radius: 6px; padding: 10px; text-align: center;">
+                            <span class="stat-value" id="profile-repos-count" style="display: block; font-size: 16px; font-weight: 700; color: var(--gold-primary);">0</span>
+                            <span class="stat-label" style="font-size: 10px; color: var(--text-secondary); text-transform: uppercase;">Public Repos</span>
+                        </div>
+                        <div class="stat-card" style="flex: 1; background: rgba(255,255,255,0.02); border: 1px solid var(--border-gold); border-radius: 6px; padding: 10px; text-align: center;">
+                            <span class="stat-value" style="display: block; font-size: 16px; font-weight: 700; color: var(--color-added);">Active</span>
+                            <span class="stat-label" style="font-size: 10px; color: var(--text-secondary); text-transform: uppercase;">Status</span>
+                        </div>
+                    </div>
+                    <div class="scopes-section">
+                        <h5 style="font-size: 12px; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 8px; letter-spacing: 0.5px;">Authorized Scopes</h5>
+                        <div id="profile-scopes-list" class="scopes-list" style="display: flex; flex-direction: column; gap: 8px;">
+                            <!-- Scopes will be rendered here -->
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="cancel-btn destructive-btn" id="btn-signout-github" style="color: var(--color-deleted); border-color: rgba(244,67,54,0.3);">Disconnect Account</button>
+                    <button class="gold-btn" onclick="GitHubController.closeModal()">Done</button>
+                </div>
+            </div>
+        </div>
     </main>
 
     <!-- PWA Registration & Scripts -->
@@ -367,6 +532,7 @@
         }
     </script>
     <script src="js/api.js"></script>
+    <script src="js/github.js"></script>
     <script src="js/toast.js"></script>
     <script src="js/splash.js"></script>
     <script src="js/dashboard.js"></script>
