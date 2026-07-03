@@ -5,3 +5,16 @@ __pycache__/
 .DS_Store
 test_dulwich.py
 test.txt
+
+# Python Virtual Environments
+venv/
+.venv/
+
+# Development Tools & Linters
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# IDE Configuration Settings
+.vscode/
+.idea/
