@@ -30,20 +30,26 @@ if ! command -v python3 &> /dev/null; then
     exit 1
 fi
 
-# 2. Install dependencies via pip (adding pywebview for native window wrapper)
-echo "[+] Installing system dependencies (dulwich, psutil, pywebview)..."
-python3 -m pip install --user --break-system-packages dulwich psutil pywebview || {
-    echo "[!] Standard pip install failed, attempting local venv fallback..."
-    python3 -m venv venv
-    if [ -n "$SUDO_USER" ]; then
-        chown -R "$REAL_USER:$REAL_USER" venv
-    fi
-    source venv/bin/activate
-    pip install dulwich psutil pywebview
-    if [ -n "$SUDO_USER" ]; then
-        chown -R "$REAL_USER:$REAL_USER" venv
-    fi
-}
+# 2. Setup Python virtual environment (venv) and install dependencies
+echo "[+] Creating Python virtual environment (venv)..."
+if ! python3 -m venv venv 2>/dev/null; then
+    echo "[-] Error: Failed to create virtual environment."
+    echo "    Please ensure 'python3-venv' is installed (e.g., 'sudo apt install python3-venv')."
+    exit 1
+fi
+
+if [ -n "$SUDO_USER" ]; then
+    chown -R "$REAL_USER:$REAL_USER" venv
+fi
+
+echo "[+] Installing dependencies inside virtual environment (dulwich, psutil, pywebview, PyQt5, PyQtWebEngine, qtpy)..."
+source venv/bin/activate
+pip install --upgrade pip
+pip install dulwich psutil pywebview PyQt5 PyQtWebEngine qtpy
+
+if [ -n "$SUDO_USER" ]; then
+    chown -R "$REAL_USER:$REAL_USER" venv
+fi
 
 # 3. Setup Systemd Service (in writable snap-local $REAL_HOME)
 echo "[+] Configuring systemd user service..."
