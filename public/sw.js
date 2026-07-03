@@ -1,4 +1,4 @@
-const CACHE_NAME = "gods-git-control-v1";
+const CACHE_NAME = "gods-git-control-v2";
 const ASSETS = [
   "/",
   "/index.html",
@@ -6,6 +6,7 @@ const ASSETS = [
   "/manifest.json",
   "/js/app.js",
   "/js/api.js",
+  "/js/github.js",
   "/js/toast.js",
   "/js/splash.js",
   "/js/dashboard.js",
