@@ -133,48 +133,52 @@ def scan_for_repos(start_path: str, max_depth: int = 4) -> List[Dict[str, str]]:
 
     Returns:
         List of dictionaries containing name, path, and active branch of each found repo.
+
+    Note:
+        Scanning only reads repository metadata and never mutates; the global
+        git_lock is intentionally NOT held during the (potentially long) os.walk
+        so concurrent git operations are not blocked for the whole traversal.
     """
-    with git_lock:
-        repos = []
-        start_path = os.path.abspath(start_path)
-        if os.path.exists(os.path.join(start_path, ".git")):
+    repos = []
+    start_path = os.path.abspath(start_path)
+    if os.path.exists(os.path.join(start_path, ".git")):
+        try:
+            r = Repo(start_path)
+            branch = porcelain.active_branch(r).decode("utf-8")
+            repos.append(
+                {
+                    "name": os.path.basename(start_path),
+                    "path": start_path,
+                    "branch": branch,
+                }
+            )
+        except Exception:
+            pass
+        return repos
+
+    base_depth = start_path.count(os.path.sep)
+    for root, dirs, files in os.walk(start_path, followlinks=False):
+        cur_depth = root.count(os.path.sep)
+        if cur_depth - base_depth >= max_depth:
+            dirs[:] = []
+            continue
+
+        if ".git" in dirs:
+            repo_path = root
             try:
-                r = Repo(start_path)
+                r = Repo(repo_path)
                 branch = porcelain.active_branch(r).decode("utf-8")
                 repos.append(
                     {
-                        "name": os.path.basename(start_path),
-                        "path": start_path,
+                        "name": os.path.basename(repo_path) or repo_path,
+                        "path": repo_path,
                         "branch": branch,
                     }
                 )
             except Exception:
                 pass
-            return repos
-
-        base_depth = start_path.count(os.path.sep)
-        for root, dirs, files in os.walk(start_path, followlinks=False):
-            cur_depth = root.count(os.path.sep)
-            if cur_depth - base_depth >= max_depth:
-                dirs[:] = []
-                continue
-
-            if ".git" in dirs:
-                repo_path = root
-                try:
-                    r = Repo(repo_path)
-                    branch = porcelain.active_branch(r).decode("utf-8")
-                    repos.append(
-                        {
-                            "name": os.path.basename(repo_path) or repo_path,
-                            "path": repo_path,
-                            "branch": branch,
-                        }
-                    )
-                except Exception:
-                    pass
-                dirs.remove(".git")
-        return repos
+            dirs.remove(".git")
+    return repos
 
 
 def browse_directory(path: str) -> Dict[str, Any]:
@@ -1236,6 +1240,43 @@ class GitControlRequestHandler(http.server.SimpleHTTPRequestHandler):
         except Exception as e:
             self.send_json({"success": False, "error": str(e)}, 500)
 
+    def _resolve_github_repo(self, repo_path: str):
+        """Validate a repo path and resolve its authenticated GitHub remote.
+
+        Performs the shared guard preamble used by the github status/issues handlers:
+        path presence, path safety, token presence, remote presence, GitHub-ness.
+        On any failure sends the appropriate JSON error and returns None; otherwise
+        returns the (token, parsed_remote) tuple.
+        """
+        if not repo_path:
+            self.send_json({"success": False, "error": "Path parameter required"}, 400)
+            return None
+        if not is_safe_path(repo_path):
+            self.send_json(
+                {"success": False, "error": "Invalid or unauthorized path"}, 400
+            )
+            return None
+
+        token = _get_token_from_request(self)
+        if not token:
+            self.send_json(
+                {"success": False, "error": "GitHub authentication required"}, 401
+            )
+            return None
+
+        url = get_repo_remote_url(repo_path)
+        if not url:
+            self.send_json({"success": False, "error": "No remote configured"}, 400)
+            return None
+
+        parsed = parse_github_remote(url)
+        if not parsed:
+            self.send_json(
+                {"success": False, "error": "Remote is not a GitHub repository"}, 400
+            )
+            return None
+        return token, parsed
+
     def _api_github_remote(self, query):
         repo_path = query.get("path", [""])[0]
         if not repo_path:
@@ -1275,32 +1316,10 @@ class GitControlRequestHandler(http.server.SimpleHTTPRequestHandler):
 
     def _api_github_sync_status(self, query):
         repo_path = query.get("path", [""])[0]
-        if not repo_path:
-            return self.send_json(
-                {"success": False, "error": "Path parameter required"}, 400
-            )
-        if not is_safe_path(repo_path):
-            return self.send_json(
-                {"success": False, "error": "Invalid or unauthorized path"}, 400
-            )
-
-        token = _get_token_from_request(self)
-        if not token:
-            return self.send_json(
-                {"success": False, "error": "GitHub authentication required"}, 401
-            )
-
-        url = get_repo_remote_url(repo_path)
-        if not url:
-            return self.send_json(
-                {"success": False, "error": "No remote configured"}, 400
-            )
-
-        parsed = parse_github_remote(url)
-        if not parsed:
-            return self.send_json(
-                {"success": False, "error": "Remote is not a GitHub repository"}, 400
-            )
+        resolved = self._resolve_github_repo(repo_path)
+        if not resolved:
+            return
+        token, parsed = resolved
 
         try:
             status = calculate_sync_status(
@@ -1312,32 +1331,10 @@ class GitControlRequestHandler(http.server.SimpleHTTPRequestHandler):
 
     def _api_github_issues_prs(self, query):
         repo_path = query.get("path", [""])[0]
-        if not repo_path:
-            return self.send_json(
-                {"success": False, "error": "Path parameter required"}, 400
-            )
-        if not is_safe_path(repo_path):
-            return self.send_json(
-                {"success": False, "error": "Invalid or unauthorized path"}, 400
-            )
-
-        token = _get_token_from_request(self)
-        if not token:
-            return self.send_json(
-                {"success": False, "error": "GitHub authentication required"}, 401
-            )
-
-        url = get_repo_remote_url(repo_path)
-        if not url:
-            return self.send_json(
-                {"success": False, "error": "No remote configured"}, 400
-            )
-
-        parsed = parse_github_remote(url)
-        if not parsed:
-            return self.send_json(
-                {"success": False, "error": "Remote is not a GitHub repository"}, 400
-            )
+        resolved = self._resolve_github_repo(repo_path)
+        if not resolved:
+            return
+        token, parsed = resolved
 
         try:
             data = fetch_github_issues_prs(token, parsed["owner"], parsed["repo"])
