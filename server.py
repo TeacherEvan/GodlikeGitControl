@@ -484,6 +484,62 @@ def delete_saved_token() -> None:
             pass
 
 
+def _github_api(
+    method: str,
+    url: str,
+    token: Optional[str] = None,
+    body: Optional[Dict[str, Any]] = None,
+    timeout: float = 5.0,
+    capture_headers: bool = False,
+) -> Any:
+    """Perform a GitHub REST API call with the standard auth/accept/UA headers.
+
+    Args:
+        method: HTTP method (GET, POST, ...).
+        url: Fully-qualified GitHub API URL.
+        token: Optional bearer token; redacted from any raised error string.
+        body: Optional JSON-serializable request body (forces Content-Type: application/json).
+        timeout: Socket timeout in seconds.
+        capture_headers: If True, return (parsed_json, headers_dict) instead of parsed_json.
+
+    Returns:
+        Parsed JSON (dict/list) on success, or (parsed_json, headers) when capture_headers.
+
+    Raises:
+        Exception: with the raw token redacted (SEC-01) for transport/HTTP errors.
+    """
+    data_bytes = None
+    if body is not None:
+        data_bytes = json.dumps(body).encode("utf-8")
+    req = urllib.request.Request(url, data=data_bytes, method=method)
+    if token:
+        req.add_header("Authorization", f"Bearer {token}")
+    req.add_header("Accept", "application/vnd.github.v3+json")
+    req.add_header("User-Agent", "GodlikeGitControl-Server")
+    if data_bytes is not None:
+        req.add_header("Content-Type", "application/json")
+
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            raw = response.read().decode("utf-8")
+            parsed = json.loads(raw) if raw else None
+            if capture_headers:
+                return parsed, dict(response.headers)
+            return parsed
+    except urllib.error.HTTPError as e:
+        # Surface the status; redact token from reason text (SEC-01)
+        reason = str(e.reason).replace(token or "", "[REDACTED]") if token else str(e.reason)
+        try:
+            err_body = json.loads(e.read().decode("utf-8"))
+            detail = err_body.get("message", reason)
+        except Exception:
+            detail = reason
+        raise Exception(f"GitHub API Error: {e.code} - {detail}")
+    except Exception as e:
+        msg = str(e).replace(token or "", "[REDACTED]") if token else str(e)
+        raise Exception(f"Failed to reach GitHub API: {msg}")
+
+
 def fetch_github_profile(token: str) -> Dict[str, Any]:
     """Fetch the GitHub profile details for the given token.
 
@@ -508,35 +564,29 @@ def fetch_github_profile(token: str) -> Dict[str, Any]:
             },
             "scopes": ["repo", "read:user"],
         }
-    url = "https://api.github.com/user"
-    req = urllib.request.Request(url)
-    req.add_header("Authorization", f"Bearer {token}")
-    req.add_header("Accept", "application/vnd.github.v3+json")
-    req.add_header("User-Agent", "GodlikeGitControl-Server")
-
     try:
-        with urllib.request.urlopen(req, timeout=5.0) as response:
-            data = json.loads(response.read().decode("utf-8"))
-            scopes_header = response.headers.get("X-OAuth-Scopes", "")
-            scopes = [s.strip() for s in scopes_header.split(",") if s.strip()]
-            return {
-                "authenticated": True,
-                "user": {
-                    "login": data.get("login"),
-                    "name": data.get("name") or data.get("login"),
-                    "avatar_url": data.get("avatar_url"),
-                    "html_url": data.get("html_url"),
-                    "public_repos": data.get("public_repos", 0),
-                    "bio": data.get("bio") or "",
-                },
-                "scopes": scopes,
-            }
-    except urllib.error.HTTPError as e:
-        if e.code in [401, 403]:
-            return {"authenticated": False, "error": "Invalid token or unauthorized"}
-        raise Exception(f"GitHub API Error: {e.code} - {e.reason}")
+        data, headers = _github_api(
+            "GET", "https://api.github.com/user", token, capture_headers=True
+        )
+        scopes_header = headers.get("X-OAuth-Scopes", "")
+        scopes = [s.strip() for s in scopes_header.split(",") if s.strip()]
+        return {
+            "authenticated": True,
+            "user": {
+                "login": data.get("login"),
+                "name": data.get("name") or data.get("login"),
+                "avatar_url": data.get("avatar_url"),
+                "html_url": data.get("html_url"),
+                "public_repos": data.get("public_repos", 0),
+                "bio": data.get("bio") or "",
+            },
+            "scopes": scopes,
+        }
     except Exception as e:
-        raise Exception(f"Failed to reach GitHub API: {e}")
+        msg = str(e)
+        if "401" in msg or "403" in msg:
+            return {"authenticated": False, "error": "Invalid token or unauthorized"}
+        raise
 
 
 def _get_token_from_request(handler: Any) -> Optional[str]:
@@ -648,21 +698,14 @@ def fetch_github_branch_head(
     if os.environ.get("GGC_TESTING") == "true":
         return "1234567890abcdef1234567890abcdef12345678"
     url = f"https://api.github.com/repos/{owner}/{repo}/branches/{urllib.parse.quote(branch)}"
-    req = urllib.request.Request(url)
-    req.add_header("Authorization", f"Bearer {token}")
-    req.add_header("Accept", "application/vnd.github.v3+json")
-    req.add_header("User-Agent", "GodlikeGitControl-Server")
-
     try:
-        with urllib.request.urlopen(req, timeout=5.0) as response:
-            data = json.loads(response.read().decode("utf-8"))
-            return data.get("commit", {}).get("sha")
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
-            return None
-        raise Exception(f"Failed to fetch remote branch: {e.code}")
+        data = _github_api("GET", url, token)
+        return data.get("commit", {}).get("sha") if data else None
     except Exception as e:
-        raise Exception(f"Error checking remote branch: {e}")
+        msg = str(e)
+        if "404" in msg:
+            return None
+        raise
 
 
 def is_ancestor(repo: Repo, ancestor_sha: str, descendant_sha: str) -> bool:
@@ -837,32 +880,28 @@ def fetch_github_issues_prs(token: str, owner: str, repo: str) -> Dict[str, Any]
             ],
         }
     url = f"https://api.github.com/repos/{owner}/{repo}/issues?state=open&per_page=10"
-    req = urllib.request.Request(url)
-    req.add_header("Authorization", f"Bearer {token}")
-    req.add_header("Accept", "application/vnd.github.v3+json")
-    req.add_header("User-Agent", "GodlikeGitControl-Server")
-
     try:
-        with urllib.request.urlopen(req, timeout=5.0) as response:
-            items = json.loads(response.read().decode("utf-8"))
-            issues: List[Dict[str, Any]] = []
-            prs: List[Dict[str, Any]] = []
-            for item in items:
-                is_pr = "pull_request" in item
-                obj = {
-                    "number": item.get("number"),
-                    "title": item.get("title"),
-                    "html_url": item.get("html_url"),
-                    "user": item.get("user", {}).get("login"),
-                    "created_at": item.get("created_at"),
-                }
-                if is_pr:
-                    if len(prs) < 3:
-                        prs.append(obj)
-                else:
-                    if len(issues) < 3:
-                        issues.append(obj)
-            return {"issues": issues, "prs": prs}
+        items = _github_api("GET", url, token)
+        if not items:
+            return {"issues": [], "prs": []}
+        issues: List[Dict[str, Any]] = []
+        prs: List[Dict[str, Any]] = []
+        for item in items:
+            is_pr = "pull_request" in item
+            obj = {
+                "number": item.get("number"),
+                "title": item.get("title"),
+                "html_url": item.get("html_url"),
+                "user": item.get("user", {}).get("login"),
+                "created_at": item.get("created_at"),
+            }
+            if is_pr:
+                if len(prs) < 3:
+                    prs.append(obj)
+            else:
+                if len(issues) < 3:
+                    issues.append(obj)
+        return {"issues": issues, "prs": prs}
     except Exception as e:
         raise Exception(f"Failed to fetch issues/PRs from GitHub: {e}")
 
@@ -977,26 +1016,14 @@ def create_github_repo_api(token: str, name: str, private: bool) -> str:
         "private": private,
         "description": "Created via God's Git-Control",
     }
-    data_bytes = json.dumps(body).encode("utf-8")
-
-    req = urllib.request.Request(url, data=data_bytes, method="POST")
-    req.add_header("Authorization", f"Bearer {token}")
-    req.add_header("Accept", "application/vnd.github.v3+json")
-    req.add_header("Content-Type", "application/json")
-    req.add_header("User-Agent", "GodlikeGitControl-Server")
-
     try:
-        with urllib.request.urlopen(req, timeout=5.0) as response:
-            data = json.loads(response.read().decode("utf-8"))
-            return data["clone_url"]
-    except urllib.error.HTTPError as e:
-        error_msg = e.read().decode("utf-8")
-        try:
-            err_data = json.loads(error_msg)
-            message = err_data.get("message", error_msg)
-        except Exception:
-            message = error_msg
-        raise Exception(f"GitHub repo creation failed: {message}")
+        data = _github_api("POST", url, token, body)
+        return data["clone_url"]
+    except Exception as e:
+        msg = str(e)
+        if "GitHub API Error" in msg:
+            raise
+        raise Exception(f"GitHub repo creation failed: {msg}")
 
 
 def link_and_push_github_repo(repo_path: str, clone_url: str, token: str) -> None:
