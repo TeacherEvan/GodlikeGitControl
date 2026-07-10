@@ -1,0 +1,15 @@
+# Pinned dependencies for GodlikeGitControl.
+# Generate with: pip freeze > requirements.txt
+# Runtime / server + tests:
+dulwich==1.2.7
+psutil==7.2.2
+pytest==9.0.3
+urllib3==2.7.0
+# Native desktop GUI window (app_window.py) — not required by server/tests:
+pywebview==6.2.1
+PyQt5==5.15.11
+PyQt5-Qt5==5.15.19
+PyQt5_sip==12.18.0
+PyQtWebEngine==5.15.7
+PyQtWebEngine-Qt5==5.15.19
+QtPy==2.4.3
