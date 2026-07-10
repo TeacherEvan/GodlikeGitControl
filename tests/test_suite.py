@@ -550,5 +550,85 @@ class TestGodlikeGitControl(unittest.TestCase):
         self.assertFalse(data["authenticated"])
 
 
+class TestSyncCredentialScrub(unittest.TestCase):
+    """Unit tests for push/pull token handling (BUG#2, #8) — no HTTP, no real GitHub."""
+
+    def setUp(self):
+        import server as _server
+
+        self.server = _server
+        self.temp_dir = tempfile.mkdtemp()
+        self.repo_path = os.path.join(self.temp_dir, "scrub_repo")
+        os.makedirs(self.repo_path, exist_ok=True)
+        r = Repo.init(self.repo_path)
+        # Configure a remote origin that contains an embedded token, as link_and_push does.
+        config = r.get_config()
+        config.set(
+            (b"remote", b"origin"),
+            b"url",
+            b"https://stoic-test:SECRET_TOKEN@github.com/stoic-test/scrub_repo.git",
+        )
+        config.set(
+            (b"remote", b"origin"),
+            b"fetch",
+            b"+refs/heads/*:refs/remotes/origin/*",
+        )
+        config.write_to_path()
+
+    def tearDown(self):
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def _assert_token_scrubbed(self):
+        url = self.server.get_repo_remote_url(self.repo_path)
+        self.assertIsNotNone(url, "remote origin url missing")
+        assert url is not None  # narrow for type checkers
+        self.assertNotIn("SECRET_TOKEN", url, "Token leaked into .git/config")
+        self.assertTrue(url.startswith("https://github.com/stoic-test/scrub_repo.git"))
+
+    def test_push_scrubs_token_from_config(self):
+        """push_to_github must not leave the token in .git/config (BUG#2)."""
+        calls: Dict[str, str] = {}
+        orig_testing = os.environ.get("GGC_TESTING")
+        os.environ.pop("GGC_TESTING", None)  # exercise the real sync path
+
+        def fake_push(repo, url, refspec):
+            calls["url"] = url.decode() if isinstance(url, bytes) else url
+            return None
+
+        orig = self.server.porcelain.push
+        self.server.porcelain.push = fake_push
+        try:
+            self.server.push_to_github(self.repo_path, "SECRET_TOKEN")
+        finally:
+            self.server.porcelain.push = orig
+            if orig_testing is not None:
+                os.environ["GGC_TESTING"] = orig_testing
+        # Auth URL used for the network call must carry the token...
+        self.assertIn("SECRET_TOKEN", calls["url"])
+        # ...but the stored remote URL must be scrubbed afterwards.
+        self._assert_token_scrubbed()
+
+    def test_pull_scrubs_token_from_config(self):
+        """pull_from_github must not leave the token in .git/config (BUG#2)."""
+        calls: Dict[str, str] = {}
+        orig_testing = os.environ.get("GGC_TESTING")
+        os.environ.pop("GGC_TESTING", None)  # exercise the real sync path
+
+        def fake_pull(repo, url, refspec):
+            calls["url"] = url.decode() if isinstance(url, bytes) else url
+            return None
+
+        orig = self.server.porcelain.pull
+        self.server.porcelain.pull = fake_pull
+        try:
+            self.server.pull_from_github(self.repo_path, "SECRET_TOKEN")
+        finally:
+            self.server.porcelain.pull = orig
+            if orig_testing is not None:
+                os.environ["GGC_TESTING"] = orig_testing
+        self.assertIn("SECRET_TOKEN", calls["url"])
+        self._assert_token_scrubbed()
+
+
 if __name__ == "__main__":
     unittest.main()

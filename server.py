@@ -9,6 +9,7 @@ import io
 import time
 import platform
 import threading
+from typing import List, Dict, Tuple, Optional, Any, Union
 import psutil
 from dulwich.repo import Repo
 from dulwich.index import IndexEntry
@@ -19,6 +20,7 @@ PUBLIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "public")
 
 # Thread-safe cached CPU tracking daemon
 cached_cpu_pct = 0.0
+
 
 def cpu_polling_daemon():
     global cached_cpu_pct
@@ -31,10 +33,20 @@ def cpu_polling_daemon():
         except Exception:
             pass
 
+
 # Global lock to serialize git repository accesses (resolves F-01 concurrency issue)
 git_lock = threading.RLock()
 
-def is_safe_path(path_str):
+
+def is_safe_path(path_str: Optional[str]) -> bool:
+    """Check if the provided path is safe and not pointing to a system directory.
+
+    Args:
+        path_str: The directory path to check.
+
+    Returns:
+        True if the path is safe, False otherwise.
+    """
     if not path_str or "\x00" in path_str:
         return False
     try:
@@ -42,8 +54,20 @@ def is_safe_path(path_str):
         normalized = path_str.replace("\\", "/")
         real_path = os.path.realpath(normalized)
         blocked_prefixes = [
-            "/etc", "/proc", "/sys", "/dev", "/boot", "/var/log", "/var/cache", 
-            "/root", "/bin", "/sbin", "/lib", "/lib64", "/usr/bin", "/usr/sbin"
+            "/etc",
+            "/proc",
+            "/sys",
+            "/dev",
+            "/boot",
+            "/var/log",
+            "/var/cache",
+            "/root",
+            "/bin",
+            "/sbin",
+            "/lib",
+            "/lib64",
+            "/usr/bin",
+            "/usr/sbin",
         ]
         for prefix in blocked_prefixes:
             if real_path == prefix or real_path.startswith(prefix + "/"):
@@ -52,7 +76,16 @@ def is_safe_path(path_str):
     except Exception:
         return False
 
-def is_safe_relative_path(path_str):
+
+def is_safe_relative_path(path_str: Optional[str]) -> bool:
+    """Check if the provided file path is a safe relative path.
+
+    Args:
+        path_str: The relative file path to check.
+
+    Returns:
+        True if the path is relative and safe (does not escape directory boundaries), False otherwise.
+    """
     if not path_str or "\x00" in path_str:
         return False
     # Normalize Windows separators (resolves F-02)
@@ -64,26 +97,24 @@ def is_safe_relative_path(path_str):
         return False
     return True
 
+
 # Module-Level Business Logic Helpers (resolving static method review findings)
-def unstage_file(repo, path_str):
+def unstage_file(repo: Repo, path_str: Union[str, bytes]) -> None:
+    """Unstage a staged file in the git repository index.
+
+    Args:
+        repo: The dulwich Repo object.
+        path_str: The file path to unstage.
+    """
     with git_lock:
-        path_bytes = path_str.encode('utf-8') if isinstance(path_str, str) else path_str
+        path_bytes = path_str.encode("utf-8") if isinstance(path_str, str) else path_str
         index = repo.open_index()
         try:
-            head_commit = repo[repo.head()]
-            head_tree = repo[head_commit.tree]
+            head_commit: Any = repo[repo.head()]
+            head_tree: Any = repo[head_commit.tree]
             mode, sha = head_tree.lookup_path(repo.object_store.__getitem__, path_bytes)
             index[path_bytes] = IndexEntry(
-                int(time.time()),
-                int(time.time()),
-                0,
-                0,
-                mode,
-                0,
-                0,
-                0,
-                sha,
-                0
+                int(time.time()), int(time.time()), 0, 0, mode, 0, 0, 0, sha, 0
             )
         except Exception:
             try:
@@ -92,15 +123,31 @@ def unstage_file(repo, path_str):
                 pass
         index.write()
 
-def scan_for_repos(start_path, max_depth=4):
+
+def scan_for_repos(start_path: str, max_depth: int = 4) -> List[Dict[str, str]]:
+    """Scan directory tree for git repositories.
+
+    Args:
+        start_path: Root path to begin the scan.
+        max_depth: Maximum directory depth for scanning.
+
+    Returns:
+        List of dictionaries containing name, path, and active branch of each found repo.
+    """
     with git_lock:
         repos = []
         start_path = os.path.abspath(start_path)
         if os.path.exists(os.path.join(start_path, ".git")):
             try:
                 r = Repo(start_path)
-                branch = porcelain.active_branch(r).decode('utf-8')
-                repos.append({"name": os.path.basename(start_path), "path": start_path, "branch": branch})
+                branch = porcelain.active_branch(r).decode("utf-8")
+                repos.append(
+                    {
+                        "name": os.path.basename(start_path),
+                        "path": start_path,
+                        "branch": branch,
+                    }
+                )
             except Exception:
                 pass
             return repos
@@ -116,18 +163,29 @@ def scan_for_repos(start_path, max_depth=4):
                 repo_path = root
                 try:
                     r = Repo(repo_path)
-                    branch = porcelain.active_branch(r).decode('utf-8')
-                    repos.append({
-                        "name": os.path.basename(repo_path) or repo_path,
-                        "path": repo_path,
-                        "branch": branch
-                    })
+                    branch = porcelain.active_branch(r).decode("utf-8")
+                    repos.append(
+                        {
+                            "name": os.path.basename(repo_path) or repo_path,
+                            "path": repo_path,
+                            "branch": branch,
+                        }
+                    )
                 except Exception:
                     pass
                 dirs.remove(".git")
         return repos
 
-def browse_directory(path):
+
+def browse_directory(path: str) -> Dict[str, Any]:
+    """List subdirectories and files within the directory path.
+
+    Args:
+        path: Path to browse.
+
+    Returns:
+        A dictionary containing the current path, parent path, and sorted items list.
+    """
     path = os.path.abspath(path)
     if not os.path.exists(path) or not os.path.isdir(path):
         raise Exception("Invalid directory path")
@@ -137,38 +195,47 @@ def browse_directory(path):
         for entry in os.scandir(path):
             if entry.name.startswith(".") and entry.name != ".git":
                 continue
-            items.append({
-                "name": entry.name,
-                "isDir": entry.is_dir(),
-                "path": entry.path
-            })
+            items.append(
+                {"name": entry.name, "isDir": entry.is_dir(), "path": entry.path}
+            )
     except PermissionError:
         raise Exception("Permission denied browsing " + path)
 
     return {
         "currentPath": path,
         "parentPath": os.path.dirname(path),
-        "items": sorted(items, key=lambda x: (not x["isDir"], x["name"].lower()))
+        "items": sorted(items, key=lambda x: (not x["isDir"], x["name"].lower())),
     }
 
-def get_git_status(repo_path):
+
+def get_git_status(repo_path: str) -> Dict[str, Any]:
+    """Get the current git status of the repository.
+
+    Args:
+        repo_path: Path to the git repository.
+
+    Returns:
+        A dictionary containing branch name, dirty status, staged changes, unstaged changes, and untracked files.
+    """
     with git_lock:
         r = Repo(repo_path)
         try:
-            branch = porcelain.active_branch(r).decode('utf-8')
+            branch = porcelain.active_branch(r).decode("utf-8")
         except Exception:
             branch = "DETACHED"
 
         st = porcelain.status(r)
-        
-        staged_added = [f.decode('utf-8') for f in st.staged.get('add', [])]
-        staged_deleted = [f.decode('utf-8') for f in st.staged.get('delete', [])]
-        staged_modified = [f.decode('utf-8') for f in st.staged.get('modify', [])]
-        
-        unstaged = [f.decode('utf-8') for f in st.unstaged]
-        untracked = [f.decode('utf-8') for f in st.untracked]
 
-        is_dirty = bool(staged_added or staged_deleted or staged_modified or unstaged or untracked)
+        staged_added = [f.decode("utf-8") for f in st.staged.get("add", [])]
+        staged_deleted = [f.decode("utf-8") for f in st.staged.get("delete", [])]
+        staged_modified = [f.decode("utf-8") for f in st.staged.get("modify", [])]
+
+        unstaged = [f.decode("utf-8") for f in st.unstaged]
+        untracked = [f.decode("utf-8") for f in st.untracked]
+
+        is_dirty = bool(
+            staged_added or staged_deleted or staged_modified or unstaged or untracked
+        )
 
         return {
             "branch": branch,
@@ -176,13 +243,23 @@ def get_git_status(repo_path):
             "staged": {
                 "add": staged_added,
                 "delete": staged_deleted,
-                "modify": staged_modified
+                "modify": staged_modified,
             },
             "unstaged": unstaged,
-            "untracked": untracked
+            "untracked": untracked,
         }
 
-def get_git_log(repo_path, count=20):
+
+def get_git_log(repo_path: str, count: int = 20) -> List[Dict[str, Any]]:
+    """Retrieve the recent commit logs of the repository.
+
+    Args:
+        repo_path: Path to the git repository.
+        count: Maximum number of commits to retrieve.
+
+    Returns:
+        A list of commit details containing ID, message, author, and timestamp.
+    """
     with git_lock:
         r = Repo(repo_path)
         commits = []
@@ -190,37 +267,64 @@ def get_git_log(repo_path, count=20):
             walker = r.get_walker(max_entries=count)
             for entry in walker:
                 c = entry.commit
-                commits.append({
-                    "id": c.id.decode('utf-8'),
-                    "message": c.message.decode('utf-8').strip(),
-                    "author": c.author.decode('utf-8'),
-                    "time": c.commit_time
-                })
+                commits.append(
+                    {
+                        "id": c.id.decode("utf-8"),
+                        "message": c.message.decode("utf-8").strip(),
+                        "author": c.author.decode("utf-8"),
+                        "time": c.commit_time,
+                    }
+                )
         except KeyError:
             pass
         return commits
 
-def get_git_diff(repo_path, file_name, staged=False):
+
+def get_git_diff(repo_path: str, file_name: str, staged: bool = False) -> str:
+    """Get the diff of a specific file in the repository.
+
+    Args:
+        repo_path: Path to the git repository.
+        file_name: Name of the file relative to the repository.
+        staged: If True, returns staged diff; otherwise unstaged diff.
+
+    Returns:
+        The unified diff as a string.
+    """
     with git_lock:
         r = Repo(repo_path)
         out = io.BytesIO()
-        porcelain.diff(r, outstream=out, staged=staged, paths=[file_name.encode('utf-8')])
-        return out.getvalue().decode('utf-8')
+        porcelain.diff(
+            r, outstream=out, staged=staged, paths=[file_name.encode("utf-8")]
+        )
+        return out.getvalue().decode("utf-8")
 
-def _get_cpu_freq():
+
+def _get_cpu_freq() -> Optional[Dict[str, float]]:
+    """Retrieve CPU frequency statistics.
+
+    Returns:
+        Dictionary with current, min, and max frequency, or None if unavailable.
+    """
     try:
         freq = psutil.cpu_freq()
         if freq:
             return {
                 "current": round(freq.current, 1),
-                "min": round(freq.min, 1) if freq.min else 0,
-                "max": round(freq.max, 1) if freq.max else 0
+                "min": round(freq.min, 1) if freq.min else 0.0,
+                "max": round(freq.max, 1) if freq.max else 0.0,
             }
     except Exception:
         pass
     return None
 
-def _get_cpu_model():
+
+def _get_cpu_model() -> str:
+    """Retrieve the processor model name.
+
+    Returns:
+        Processor model name as a string.
+    """
     if platform.system() == "Linux":
         try:
             with open("/proc/cpuinfo", "r") as f:
@@ -231,7 +335,13 @@ def _get_cpu_model():
             pass
     return platform.processor() or "Generic Processor"
 
-def _get_disk_info():
+
+def _get_disk_info() -> List[Dict[str, Any]]:
+    """Retrieve details for non-boot local disk partitions.
+
+    Returns:
+        List of partition detail dictionaries containing device, mountpoint, fstype, and usage stats.
+    """
     disks = []
     try:
         for part in psutil.disk_partitions(all=False):
@@ -239,25 +349,33 @@ def _get_disk_info():
                 continue
             try:
                 usage = psutil.disk_usage(part.mountpoint)
-                disks.append({
-                    "device": part.device,
-                    "mountpoint": part.mountpoint,
-                    "fstype": part.fstype,
-                    "total": usage.total,
-                    "used": usage.used,
-                    "free": usage.free,
-                    "percent": usage.percent
-                })
+                disks.append(
+                    {
+                        "device": part.device,
+                        "mountpoint": part.mountpoint,
+                        "fstype": part.fstype,
+                        "total": usage.total,
+                        "used": usage.used,
+                        "free": usage.free,
+                        "percent": usage.percent,
+                    }
+                )
             except Exception:
                 pass
     except Exception:
         pass
     return disks
 
-def get_system_hardware():
+
+def get_system_hardware() -> Dict[str, Any]:
+    """Compile comprehensive system hardware status metrics.
+
+    Returns:
+        Dictionary of CPU, memory, disk, and OS uptime details.
+    """
     global cached_cpu_pct
-    
-    cpu_count = psutil.cpu_count(logical=True)
+
+    cpu_count = psutil.cpu_count(logical=True) or 1
     cpu_freq = _get_cpu_freq()
     cpu_model = _get_cpu_model()
 
@@ -266,18 +384,18 @@ def get_system_hardware():
         "total": mem.total,
         "available": mem.available,
         "used": mem.used,
-        "percent": mem.percent
+        "percent": mem.percent,
     }
 
     disks = _get_disk_info()
     uptime_seconds = time.time() - psutil.boot_time()
-    
+
     return {
         "cpu": {
             "model": cpu_model,
             "cores": cpu_count,
-            "overallPercent": cached_cpu_pct, # Returns thread-cached non-blocking value instantly
-            "frequency": cpu_freq
+            "overallPercent": cached_cpu_pct,  # Returns thread-cached non-blocking value instantly
+            "frequency": cpu_freq,
         },
         "memory": memory_info,
         "disks": disks,
@@ -285,17 +403,30 @@ def get_system_hardware():
             "os": platform.system(),
             "release": platform.release(),
             "machine": platform.machine(),
-            "uptime": int(uptime_seconds)
-        }
+            "uptime": int(uptime_seconds),
+        },
     }
+
 
 # --- GitHub Integration Business Logic Helpers ---
 session_token = None
 
-def get_config_path():
+
+def get_config_path() -> str:
+    """Get the absolute path to the local credentials config file.
+
+    Returns:
+        The configuration file path.
+    """
     return os.path.expanduser("~/.config/ggc/credentials.json")
 
-def load_saved_token():
+
+def load_saved_token() -> Optional[str]:
+    """Load the saved GitHub token from local storage or memory.
+
+    Returns:
+        The token string if found, otherwise None.
+    """
     global session_token
     if session_token:
         return session_token
@@ -309,18 +440,25 @@ def load_saved_token():
             pass
     return None
 
-def save_token(token, remember_me):
+
+def save_token(token: str, remember_me: bool) -> None:
+    """Save the GitHub token to local storage or memory.
+
+    Args:
+        token: The GitHub Personal Access Token.
+        remember_me: If True, saves to file system; if False, saves to in-memory session.
+    """
     global session_token
     if remember_me:
         config_path = get_config_path()
         try:
             os.makedirs(os.path.dirname(config_path), exist_ok=True)
-            with open(config_path, "w") as f:
+            # Open with secure permissions 0o600 from creation (resolves SEC-02)
+            flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+            mode = 0o600
+            fd = os.open(config_path, flags, mode)
+            with open(fd, "w") as f:
                 json.dump({"token": token}, f)
-            try:
-                os.chmod(config_path, 0o600)
-            except Exception:
-                pass
         except Exception as e:
             raise Exception(f"Failed to save credentials locally: {e}")
     else:
@@ -333,7 +471,9 @@ def save_token(token, remember_me):
             except Exception:
                 pass
 
-def delete_saved_token():
+
+def delete_saved_token() -> None:
+    """Delete the saved GitHub token from local storage and memory."""
     global session_token
     session_token = None
     config_path = get_config_path()
@@ -343,7 +483,16 @@ def delete_saved_token():
         except Exception:
             pass
 
-def fetch_github_profile(token):
+
+def fetch_github_profile(token: str) -> Dict[str, Any]:
+    """Fetch the GitHub profile details for the given token.
+
+    Args:
+        token: The GitHub Personal Access Token.
+
+    Returns:
+        Profile details dictionary containing authentication status, user information, and OAuth scopes.
+    """
     if os.environ.get("GGC_TESTING") == "true":
         if token == "invalid-token":
             return {"authenticated": False, "error": "Invalid token or unauthorized"}
@@ -355,19 +504,19 @@ def fetch_github_profile(token):
                 "avatar_url": "https://avatars.githubusercontent.com/u/12345?v=4",
                 "html_url": "https://github.com/stoic-test",
                 "public_repos": 5,
-                "bio": "Testing git control"
+                "bio": "Testing git control",
             },
-            "scopes": ["repo", "read:user"]
+            "scopes": ["repo", "read:user"],
         }
     url = "https://api.github.com/user"
     req = urllib.request.Request(url)
     req.add_header("Authorization", f"Bearer {token}")
     req.add_header("Accept", "application/vnd.github.v3+json")
     req.add_header("User-Agent", "GodlikeGitControl-Server")
-    
+
     try:
         with urllib.request.urlopen(req, timeout=5.0) as response:
-            data = json.loads(response.read().decode('utf-8'))
+            data = json.loads(response.read().decode("utf-8"))
             scopes_header = response.headers.get("X-OAuth-Scopes", "")
             scopes = [s.strip() for s in scopes_header.split(",") if s.strip()]
             return {
@@ -378,9 +527,9 @@ def fetch_github_profile(token):
                     "avatar_url": data.get("avatar_url"),
                     "html_url": data.get("html_url"),
                     "public_repos": data.get("public_repos", 0),
-                    "bio": data.get("bio") or ""
+                    "bio": data.get("bio") or "",
                 },
-                "scopes": scopes
+                "scopes": scopes,
             }
     except urllib.error.HTTPError as e:
         if e.code in [401, 403]:
@@ -389,32 +538,59 @@ def fetch_github_profile(token):
     except Exception as e:
         raise Exception(f"Failed to reach GitHub API: {e}")
 
-def _get_token_from_request(handler):
+
+def _get_token_from_request(handler: Any) -> Optional[str]:
+    """Retrieve the GitHub token from the request headers or local storage.
+
+    Args:
+        handler: The HTTP request handler instance.
+
+    Returns:
+        The token string if found, otherwise None.
+    """
     token = handler.headers.get("X-GitHub-Token")
     if not token:
         token = load_saved_token()
     return token
 
-def get_repo_remote_url(repo_path):
+
+def get_repo_remote_url(repo_path: str) -> Optional[str]:
+    """Retrieve the URL of the remote origin for the repository.
+
+    Args:
+        repo_path: Path to the git repository.
+
+    Returns:
+        The remote URL as a string, or None if not configured.
+    """
     with git_lock:
         try:
             r = Repo(repo_path)
             config = r.get_config()
             try:
-                url_bytes = config.get((b'remote', b'origin'), b'url')
-                return url_bytes.decode('utf-8')
+                url_bytes = config.get((b"remote", b"origin"), b"url")
+                return url_bytes.decode("utf-8")
             except KeyError:
                 return None
         except Exception:
             return None
 
-def parse_github_remote(url):
+
+def parse_github_remote(url: Optional[str]) -> Optional[Dict[str, str]]:
+    """Parse a GitHub remote URL into owner and repository name.
+
+    Args:
+        url: Remote URL string.
+
+    Returns:
+        A dictionary with "owner" and "repo" keys if valid, otherwise None.
+    """
     if not url:
         return None
     url_str = url.strip()
     if "github.com" not in url_str:
         return None
-    
+
     path = ""
     if url_str.startswith("git@github.com:"):
         path = url_str.split("git@github.com:")[1]
@@ -422,33 +598,53 @@ def parse_github_remote(url):
         path = url_str.split("git@github.com/")[1]
     elif "github.com/" in url_str:
         path = url_str.split("github.com/")[1]
-    
+
     if path:
         if path.endswith(".git"):
             path = path[:-4]
         parts = path.split("/")
         if len(parts) >= 2:
-            return {
-                "owner": parts[0],
-                "repo": parts[1]
-            }
+            return {"owner": parts[0], "repo": parts[1]}
     return None
 
-def get_local_active_branch_and_sha(repo_path):
+
+def get_local_active_branch_and_sha(repo_path: str) -> Tuple[str, Optional[str]]:
+    """Get the active local branch name and its head SHA.
+
+    Args:
+        repo_path: Path to the git repository.
+
+    Returns:
+        A tuple of (active_branch_name, head_sha).
+    """
     with git_lock:
         r = Repo(repo_path)
         try:
             active_branch_bytes = porcelain.active_branch(r)
-            active_branch = active_branch_bytes.decode('utf-8')
+            active_branch = active_branch_bytes.decode("utf-8")
         except Exception:
             active_branch = "master"
         try:
-            head_sha = r.head().decode('utf-8')
+            head_sha = r.head().decode("utf-8")
         except Exception:
             head_sha = None
         return active_branch, head_sha
 
-def fetch_github_branch_head(token, owner, repo, branch):
+
+def fetch_github_branch_head(
+    token: str, owner: str, repo: str, branch: str
+) -> Optional[str]:
+    """Fetch the latest commit SHA for a specific branch from the GitHub API.
+
+    Args:
+        token: GitHub Personal Access Token.
+        owner: Repository owner.
+        repo: Repository name.
+        branch: Branch name.
+
+    Returns:
+        The head commit SHA string if found, otherwise None.
+    """
     if os.environ.get("GGC_TESTING") == "true":
         return "1234567890abcdef1234567890abcdef12345678"
     url = f"https://api.github.com/repos/{owner}/{repo}/branches/{urllib.parse.quote(branch)}"
@@ -456,10 +652,10 @@ def fetch_github_branch_head(token, owner, repo, branch):
     req.add_header("Authorization", f"Bearer {token}")
     req.add_header("Accept", "application/vnd.github.v3+json")
     req.add_header("User-Agent", "GodlikeGitControl-Server")
-    
+
     try:
         with urllib.request.urlopen(req, timeout=5.0) as response:
-            data = json.loads(response.read().decode('utf-8'))
+            data = json.loads(response.read().decode("utf-8"))
             return data.get("commit", {}).get("sha")
     except urllib.error.HTTPError as e:
         if e.code == 404:
@@ -468,13 +664,24 @@ def fetch_github_branch_head(token, owner, repo, branch):
     except Exception as e:
         raise Exception(f"Error checking remote branch: {e}")
 
-def is_ancestor(repo, ancestor_sha, descendant_sha):
+
+def is_ancestor(repo: Repo, ancestor_sha: str, descendant_sha: str) -> bool:
+    """Check if one commit is an ancestor of another in the repository history.
+
+    Args:
+        repo: Dulwich Repo instance.
+        ancestor_sha: The commit SHA we want to check as ancestor.
+        descendant_sha: The commit SHA we want to check as descendant.
+
+    Returns:
+        True if ancestor_sha is a parent/ancestor of descendant_sha, False otherwise.
+    """
     try:
-        ancestor_bytes = ancestor_sha.encode('utf-8')
-        descendant_bytes = descendant_sha.encode('utf-8')
+        ancestor_bytes = ancestor_sha.encode("utf-8")
+        descendant_bytes = descendant_sha.encode("utf-8")
         if ancestor_bytes == descendant_bytes:
             return True
-        
+
         visited = set()
         queue = [descendant_bytes]
         while queue:
@@ -485,7 +692,7 @@ def is_ancestor(repo, ancestor_sha, descendant_sha):
                 continue
             visited.add(curr)
             try:
-                commit = repo[curr]
+                commit: Any = repo[curr]
                 for parent in commit.parents:
                     if parent not in visited:
                         queue.append(parent)
@@ -495,13 +702,24 @@ def is_ancestor(repo, ancestor_sha, descendant_sha):
     except Exception:
         return False
 
-def count_commits_between(repo, base_sha, target_sha):
+
+def count_commits_between(repo: Repo, base_sha: str, target_sha: str) -> int:
+    """Count the number of commits between base_sha and target_sha.
+
+    Args:
+        repo: Dulwich Repo instance.
+        base_sha: The starting/older commit SHA.
+        target_sha: The ending/newer commit SHA.
+
+    Returns:
+        The number of commits separating them (minimum 1 if diverged/not ancestor).
+    """
     try:
-        base_bytes = base_sha.encode('utf-8')
-        target_bytes = target_sha.encode('utf-8')
+        base_bytes = base_sha.encode("utf-8")
+        target_bytes = target_sha.encode("utf-8")
         if base_bytes == target_bytes:
             return 0
-        
+
         visited = set()
         queue = [(target_bytes, 0)]
         while queue:
@@ -512,7 +730,7 @@ def count_commits_between(repo, base_sha, target_sha):
                 continue
             visited.add(curr)
             try:
-                commit = repo[curr]
+                commit: Any = repo[curr]
                 for parent in commit.parents:
                     if parent not in visited:
                         queue.append((parent, count + 1))
@@ -522,67 +740,113 @@ def count_commits_between(repo, base_sha, target_sha):
     except Exception:
         return 1
 
-def calculate_sync_status(repo_path, token, owner, repo):
+
+def calculate_sync_status(
+    repo_path: str, token: str, owner: str, repo: str
+) -> Dict[str, Any]:
+    """Calculate whether the local repository branch is synced, ahead, behind, or diverged.
+
+    Args:
+        repo_path: Path to the local git repository.
+        token: GitHub Personal Access Token.
+        owner: Repository owner.
+        repo: Repository name.
+
+    Returns:
+        A dictionary containing the status, message, and details (ahead/behind counts).
+    """
     with git_lock:
         r = Repo(repo_path)
         branch, local_sha = get_local_active_branch_and_sha(repo_path)
         if not local_sha:
             return {"status": "Empty", "message": "No commits in local repository"}
-        
+
         remote_sha = fetch_github_branch_head(token, owner, repo, branch)
         if not remote_sha:
-            return {"status": "NotOnRemote", "message": f"Branch '{branch}' not found on remote", "localSha": local_sha}
-        
+            return {
+                "status": "NotOnRemote",
+                "message": f"Branch '{branch}' not found on remote",
+                "localSha": local_sha,
+            }
+
         if local_sha == remote_sha:
-            return {"status": "Synced", "message": "Up to date with GitHub", "localSha": local_sha, "remoteSha": remote_sha}
-        
+            return {
+                "status": "Synced",
+                "message": "Up to date with GitHub",
+                "localSha": local_sha,
+                "remoteSha": remote_sha,
+            }
+
         if is_ancestor(r, remote_sha, local_sha):
             ahead_count = count_commits_between(r, remote_sha, local_sha)
             return {
-                "status": "Ahead", 
-                "message": f"Ahead of GitHub by {ahead_count} commit(s)", 
+                "status": "Ahead",
+                "message": f"Ahead of GitHub by {ahead_count} commit(s)",
                 "count": ahead_count,
-                "localSha": local_sha, 
-                "remoteSha": remote_sha
+                "localSha": local_sha,
+                "remoteSha": remote_sha,
             }
         elif is_ancestor(r, local_sha, remote_sha):
             behind_count = count_commits_between(r, local_sha, remote_sha)
             return {
-                "status": "Behind", 
-                "message": f"Behind GitHub by {behind_count} commit(s)", 
+                "status": "Behind",
+                "message": f"Behind GitHub by {behind_count} commit(s)",
                 "count": behind_count,
-                "localSha": local_sha, 
-                "remoteSha": remote_sha
+                "localSha": local_sha,
+                "remoteSha": remote_sha,
             }
         else:
             return {
-                "status": "Diverged", 
-                "message": "Local and remote branch have diverged", 
-                "localSha": local_sha, 
-                "remoteSha": remote_sha
+                "status": "Diverged",
+                "message": "Local and remote branch have diverged",
+                "localSha": local_sha,
+                "remoteSha": remote_sha,
             }
 
-def fetch_github_issues_prs(token, owner, repo):
+
+def fetch_github_issues_prs(token: str, owner: str, repo: str) -> Dict[str, Any]:
+    """Fetch open issues and pull requests from GitHub for the repository.
+
+    Args:
+        token: GitHub Personal Access Token.
+        owner: Repository owner.
+        repo: Repository name.
+
+    Returns:
+        A dictionary with "issues" and "prs" lists.
+    """
     if os.environ.get("GGC_TESTING") == "true":
         return {
             "issues": [
-                {"number": 1, "title": "Test Issue 1", "html_url": "https://github.com/issues/1", "user": "stoic-test", "created_at": "2026-07-03T12:00:00Z"}
+                {
+                    "number": 1,
+                    "title": "Test Issue 1",
+                    "html_url": "https://github.com/issues/1",
+                    "user": "stoic-test",
+                    "created_at": "2026-07-03T12:00:00Z",
+                }
             ],
             "prs": [
-                {"number": 2, "title": "Test PR 1", "html_url": "https://github.com/pulls/2", "user": "stoic-test", "created_at": "2026-07-03T12:00:00Z"}
-            ]
+                {
+                    "number": 2,
+                    "title": "Test PR 1",
+                    "html_url": "https://github.com/pulls/2",
+                    "user": "stoic-test",
+                    "created_at": "2026-07-03T12:00:00Z",
+                }
+            ],
         }
     url = f"https://api.github.com/repos/{owner}/{repo}/issues?state=open&per_page=10"
     req = urllib.request.Request(url)
     req.add_header("Authorization", f"Bearer {token}")
     req.add_header("Accept", "application/vnd.github.v3+json")
     req.add_header("User-Agent", "GodlikeGitControl-Server")
-    
+
     try:
         with urllib.request.urlopen(req, timeout=5.0) as response:
-            items = json.loads(response.read().decode('utf-8'))
-            issues = []
-            prs = []
+            items = json.loads(response.read().decode("utf-8"))
+            issues: List[Dict[str, Any]] = []
+            prs: List[Dict[str, Any]] = []
             for item in items:
                 is_pr = "pull_request" in item
                 obj = {
@@ -590,7 +854,7 @@ def fetch_github_issues_prs(token, owner, repo):
                     "title": item.get("title"),
                     "html_url": item.get("html_url"),
                     "user": item.get("user", {}).get("login"),
-                    "created_at": item.get("created_at")
+                    "created_at": item.get("created_at"),
                 }
                 if is_pr:
                     if len(prs) < 3:
@@ -602,9 +866,47 @@ def fetch_github_issues_prs(token, owner, repo):
     except Exception as e:
         raise Exception(f"Failed to fetch issues/PRs from GitHub: {e}")
 
-def push_to_github(repo_path, token):
+
+def _scrub_remote_token(repo_path: str, parsed: Dict[str, str]) -> None:
+    """Reset origin.url in .git/config to a token-free HTTPS URL (resolves BUG#2).
+
+    The authenticated URL carrying the PAT is only used for the network call; the
+    persisted remote must never contain the credential at rest.
+    """
+    try:
+        r = Repo(repo_path)
+        config = r.get_config()
+        clean_url = (
+            f"https://github.com/{parsed['owner']}/{parsed['repo']}.git".encode("utf-8")
+        )
+        config.set((b"remote", b"origin"), b"url", clean_url)
+        config.write_to_path()
+    except Exception:
+        pass
+
+
+def _build_auth_url(parsed: Dict[str, str], token: str) -> str:
+    """Build the authenticated remote URL used for the network call."""
+    return f"https://{parsed['owner']}:{token}@github.com/{parsed['owner']}/{parsed['repo']}.git"
+
+
+def _sync_with_github(repo_path: str, token: str, op: str) -> None:
+    """Push or pull local changes to/from the remote GitHub repository.
+
+    Args:
+        repo_path: Path to the local git repository.
+        token: GitHub Personal Access Token.
+        op: Either "push" or "pull".
+
+    Note:
+        The username is derived from the remote owner (resolves #8 — no extra
+        profile network call). The PAT is redacted from exception strings (SEC-01)
+        and scrubbed from .git/config afterwards (BUG#2).
+    """
     if os.environ.get("GGC_TESTING") == "true":
         return
+    if op not in ("push", "pull"):
+        raise Exception(f"Unsupported sync operation: {op}")
     with git_lock:
         r = Repo(repo_path)
         url = get_repo_remote_url(repo_path)
@@ -613,72 +915,82 @@ def push_to_github(repo_path, token):
         parsed = parse_github_remote(url)
         if not parsed:
             raise Exception("Remote is not a GitHub repository.")
-        
-        profile = fetch_github_profile(token)
-        if not profile.get("authenticated"):
-            raise Exception("Authentication failed.")
-        username = profile["user"]["login"]
-        
-        auth_url = f"https://{username}:{token}@github.com/{parsed['owner']}/{parsed['repo']}.git"
-        
+
+        auth_url = _build_auth_url(parsed, token)
         try:
             branch_bytes = porcelain.active_branch(r)
         except Exception:
             branch_bytes = b"master"
-        
-        refspec = f"refs/heads/{branch_bytes.decode('utf-8')}:refs/heads/{branch_bytes.decode('utf-8')}".encode('utf-8')
-        porcelain.push(r, auth_url, refspec)
 
-def pull_from_github(repo_path, token):
-    if os.environ.get("GGC_TESTING") == "true":
-        return
-    with git_lock:
-        r = Repo(repo_path)
-        url = get_repo_remote_url(repo_path)
-        if not url:
-            raise Exception("No remote URL configured.")
-        parsed = parse_github_remote(url)
-        if not parsed:
-            raise Exception("Remote is not a GitHub repository.")
-        
-        profile = fetch_github_profile(token)
-        if not profile.get("authenticated"):
-            raise Exception("Authentication failed.")
-        username = profile["user"]["login"]
-        
-        auth_url = f"https://{username}:{token}@github.com/{parsed['owner']}/{parsed['repo']}.git"
-        
+        refspec = f"refs/heads/{branch_bytes.decode('utf-8')}:refs/heads/{branch_bytes.decode('utf-8')}".encode(
+            "utf-8"
+        )
         try:
-            branch_bytes = porcelain.active_branch(r)
-        except Exception:
-            branch_bytes = b"master"
-        
-        refspec = f"refs/heads/{branch_bytes.decode('utf-8')}:refs/heads/{branch_bytes.decode('utf-8')}".encode('utf-8')
-        porcelain.pull(r, auth_url, refspec)
+            if op == "push":
+                porcelain.push(r, auth_url, refspec)
+            else:
+                porcelain.pull(r, auth_url, refspec)
+        except Exception as e:
+            # Redact raw token from any returned exception string (resolves SEC-01)
+            raise Exception(str(e).replace(token, "[REDACTED]")) from e
+        finally:
+            # Always scrub the token from persisted config, even on failure (BUG#2)
+            _scrub_remote_token(repo_path, parsed)
 
-def create_github_repo_api(token, name, private):
+
+def push_to_github(repo_path: str, token: str) -> None:
+    """Push local changes to the remote GitHub repository.
+
+    Args:
+        repo_path: Path to the local git repository.
+        token: GitHub Personal Access Token.
+    """
+    _sync_with_github(repo_path, token, "push")
+
+
+def pull_from_github(repo_path: str, token: str) -> None:
+    """Pull remote changes from the GitHub repository.
+
+    Args:
+        repo_path: Path to the local git repository.
+        token: GitHub Personal Access Token.
+    """
+    _sync_with_github(repo_path, token, "pull")
+
+
+def create_github_repo_api(token: str, name: str, private: bool) -> str:
+    """Call the GitHub API to create a new repository.
+
+    Args:
+        token: GitHub Personal Access Token.
+        name: Name of the repository to create.
+        private: Whether the repository should be private.
+
+    Returns:
+        The repository's HTTP clone URL.
+    """
     if os.environ.get("GGC_TESTING") == "true":
         return f"https://github.com/stoic-test/{name}.git"
     url = "https://api.github.com/user/repos"
     body = {
         "name": name,
         "private": private,
-        "description": "Created via God's Git-Control"
+        "description": "Created via God's Git-Control",
     }
-    data_bytes = json.dumps(body).encode('utf-8')
-    
+    data_bytes = json.dumps(body).encode("utf-8")
+
     req = urllib.request.Request(url, data=data_bytes, method="POST")
     req.add_header("Authorization", f"Bearer {token}")
     req.add_header("Accept", "application/vnd.github.v3+json")
     req.add_header("Content-Type", "application/json")
     req.add_header("User-Agent", "GodlikeGitControl-Server")
-    
+
     try:
         with urllib.request.urlopen(req, timeout=5.0) as response:
-            data = json.loads(response.read().decode('utf-8'))
+            data = json.loads(response.read().decode("utf-8"))
             return data["clone_url"]
     except urllib.error.HTTPError as e:
-        error_msg = e.read().decode('utf-8')
+        error_msg = e.read().decode("utf-8")
         try:
             err_data = json.loads(error_msg)
             message = err_data.get("message", error_msg)
@@ -686,18 +998,30 @@ def create_github_repo_api(token, name, private):
             message = error_msg
         raise Exception(f"GitHub repo creation failed: {message}")
 
-def link_and_push_github_repo(repo_path, clone_url, token):
+
+def link_and_push_github_repo(repo_path: str, clone_url: str, token: str) -> None:
+    """Set the remote origin URL of a repository and push local branch to it.
+
+    Args:
+        repo_path: Path to the local repository.
+        clone_url: Clone URL of the newly created remote repository.
+        token: GitHub Personal Access Token.
+    """
     with git_lock:
         r = Repo(repo_path)
         config = r.get_config()
-        config.set((b'remote', b'origin'), b'url', clone_url.encode('utf-8'))
-        config.set((b'remote', b'origin'), b'fetch', b'+refs/heads/*:refs/remotes/origin/*')
+        config.set((b"remote", b"origin"), b"url", clone_url.encode("utf-8"))
+        config.set(
+            (b"remote", b"origin"), b"fetch", b"+refs/heads/*:refs/remotes/origin/*"
+        )
         config.write_to_path()
         push_to_github(repo_path, token)
+
 
 # Threaded HTTP Server (resolves single-threaded blocking findings)
 class ThreadingTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
     allow_reuse_address = True
+
 
 class GitControlRequestHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
@@ -722,18 +1046,30 @@ class GitControlRequestHandler(http.server.SimpleHTTPRequestHandler):
         path = parsed_url.path
 
         if path.startswith("/api/"):
-            content_type = self.headers.get('Content-Type', '')
-            if not content_type.startswith('application/json'):
-                self.send_json({"success": False, "error": "Content-Type must be application/json"}, 400)
+            content_type = self.headers.get("Content-Type", "")
+            if not content_type.startswith("application/json"):
+                self.send_json(
+                    {
+                        "success": False,
+                        "error": "Content-Type must be application/json",
+                    },
+                    400,
+                )
                 return
 
-            origin = self.headers.get('Origin')
-            referer = self.headers.get('Referer')
+            origin = self.headers.get("Origin")
+            referer = self.headers.get("Referer")
             allowed_hosts = ["localhost", "127.0.0.1"]
 
             # Requiring at least one of Origin or Referer to prevent header-stripping CSRF bypass (resolves F-03)
             if not origin and not referer:
-                self.send_json({"success": False, "error": "Missing Origin and Referer headers (CSRF protection)"}, 400)
+                self.send_json(
+                    {
+                        "success": False,
+                        "error": "Missing Origin and Referer headers (CSRF protection)",
+                    },
+                    400,
+                )
                 return
 
             def is_allowed(url_str):
@@ -744,13 +1080,19 @@ class GitControlRequestHandler(http.server.SimpleHTTPRequestHandler):
                 return hostname in allowed_hosts
 
             if not is_allowed(origin) or not is_allowed(referer):
-                self.send_json({"success": False, "error": "Unauthorized origin (CSRF protection)"}, 403)
+                self.send_json(
+                    {
+                        "success": False,
+                        "error": "Unauthorized origin (CSRF protection)",
+                    },
+                    403,
+                )
                 return
 
-            content_length = int(self.headers.get('Content-Length', 0))
+            content_length = int(self.headers.get("Content-Length", 0))
             post_data = self.rfile.read(content_length)
             try:
-                body = json.loads(post_data.decode('utf-8')) if post_data else {}
+                body = json.loads(post_data.decode("utf-8")) if post_data else {}
             except Exception:
                 body = {}
             self.handle_api_post(path, body)
@@ -761,7 +1103,7 @@ class GitControlRequestHandler(http.server.SimpleHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
-        self.wfile.write(json.dumps(data).encode('utf-8'))
+        self.wfile.write(json.dumps(data).encode("utf-8"))
 
     def handle_api_get(self, path, query):
         try:
@@ -788,34 +1130,46 @@ class GitControlRequestHandler(http.server.SimpleHTTPRequestHandler):
     def _api_fs_scan(self, query):
         scan_path = query.get("path", [os.path.expanduser("~")])[0]
         if not is_safe_path(scan_path):
-            return self.send_json({"success": False, "error": "Invalid or unauthorized path"}, 400)
+            return self.send_json(
+                {"success": False, "error": "Invalid or unauthorized path"}, 400
+            )
         repos = scan_for_repos(scan_path)
         self.send_json({"success": True, "repos": repos})
 
     def _api_fs_browse(self, query):
         browse_path = query.get("path", [os.path.expanduser("~")])[0]
         if not is_safe_path(browse_path):
-            return self.send_json({"success": False, "error": "Invalid or unauthorized path"}, 400)
+            return self.send_json(
+                {"success": False, "error": "Invalid or unauthorized path"}, 400
+            )
         data = browse_directory(browse_path)
         self.send_json({"success": True, "data": data})
 
     def _api_git_status(self, query):
         repo_path = query.get("path", [""])[0]
         if not repo_path:
-            return self.send_json({"success": False, "error": "Path parameter required"}, 400)
+            return self.send_json(
+                {"success": False, "error": "Path parameter required"}, 400
+            )
         if not is_safe_path(repo_path):
-            return self.send_json({"success": False, "error": "Invalid or unauthorized path"}, 400)
-        
+            return self.send_json(
+                {"success": False, "error": "Invalid or unauthorized path"}, 400
+            )
+
         status_info = get_git_status(repo_path)
         self.send_json({"success": True, "status": status_info})
 
     def _api_git_log(self, query):
         repo_path = query.get("path", [""])[0]
         if not repo_path:
-            return self.send_json({"success": False, "error": "Path parameter required"}, 400)
+            return self.send_json(
+                {"success": False, "error": "Path parameter required"}, 400
+            )
         if not is_safe_path(repo_path):
-            return self.send_json({"success": False, "error": "Invalid or unauthorized path"}, 400)
-        
+            return self.send_json(
+                {"success": False, "error": "Invalid or unauthorized path"}, 400
+            )
+
         commits = get_git_log(repo_path)
         self.send_json({"success": True, "commits": commits})
 
@@ -826,11 +1180,17 @@ class GitControlRequestHandler(http.server.SimpleHTTPRequestHandler):
         staged = staged_str.lower() == "true"
 
         if not repo_path or not file_name:
-            return self.send_json({"success": False, "error": "Path and file parameters required"}, 400)
+            return self.send_json(
+                {"success": False, "error": "Path and file parameters required"}, 400
+            )
         if not is_safe_path(repo_path):
-            return self.send_json({"success": False, "error": "Invalid or unauthorized path"}, 400)
+            return self.send_json(
+                {"success": False, "error": "Invalid or unauthorized path"}, 400
+            )
         if not is_safe_relative_path(file_name):
-            return self.send_json({"success": False, "error": "Invalid or unauthorized file path"}, 400)
+            return self.send_json(
+                {"success": False, "error": "Invalid or unauthorized file path"}, 400
+            )
 
         diff_content = get_git_diff(repo_path, file_name, staged)
         self.send_json({"success": True, "diff": diff_content})
@@ -852,53 +1212,73 @@ class GitControlRequestHandler(http.server.SimpleHTTPRequestHandler):
     def _api_github_remote(self, query):
         repo_path = query.get("path", [""])[0]
         if not repo_path:
-            return self.send_json({"success": False, "error": "Path parameter required"}, 400)
+            return self.send_json(
+                {"success": False, "error": "Path parameter required"}, 400
+            )
         if not is_safe_path(repo_path):
-            return self.send_json({"success": False, "error": "Invalid or unauthorized path"}, 400)
-        
+            return self.send_json(
+                {"success": False, "error": "Invalid or unauthorized path"}, 400
+            )
+
         url = get_repo_remote_url(repo_path)
         if not url:
             return self.send_json({"success": True, "hasRemote": False})
-        
+
         parsed = parse_github_remote(url)
         if parsed:
-            self.send_json({
-                "success": True,
-                "hasRemote": True,
-                "isGitHub": True,
-                "remoteUrl": url,
-                "owner": parsed["owner"],
-                "repo": parsed["repo"]
-            })
+            self.send_json(
+                {
+                    "success": True,
+                    "hasRemote": True,
+                    "isGitHub": True,
+                    "remoteUrl": url,
+                    "owner": parsed["owner"],
+                    "repo": parsed["repo"],
+                }
+            )
         else:
-            self.send_json({
-                "success": True,
-                "hasRemote": True,
-                "isGitHub": False,
-                "remoteUrl": url
-            })
+            self.send_json(
+                {
+                    "success": True,
+                    "hasRemote": True,
+                    "isGitHub": False,
+                    "remoteUrl": url,
+                }
+            )
 
     def _api_github_sync_status(self, query):
         repo_path = query.get("path", [""])[0]
         if not repo_path:
-            return self.send_json({"success": False, "error": "Path parameter required"}, 400)
+            return self.send_json(
+                {"success": False, "error": "Path parameter required"}, 400
+            )
         if not is_safe_path(repo_path):
-            return self.send_json({"success": False, "error": "Invalid or unauthorized path"}, 400)
-        
+            return self.send_json(
+                {"success": False, "error": "Invalid or unauthorized path"}, 400
+            )
+
         token = _get_token_from_request(self)
         if not token:
-            return self.send_json({"success": False, "error": "GitHub authentication required"}, 401)
-        
+            return self.send_json(
+                {"success": False, "error": "GitHub authentication required"}, 401
+            )
+
         url = get_repo_remote_url(repo_path)
         if not url:
-            return self.send_json({"success": False, "error": "No remote configured"}, 400)
-        
+            return self.send_json(
+                {"success": False, "error": "No remote configured"}, 400
+            )
+
         parsed = parse_github_remote(url)
         if not parsed:
-            return self.send_json({"success": False, "error": "Remote is not a GitHub repository"}, 400)
-        
+            return self.send_json(
+                {"success": False, "error": "Remote is not a GitHub repository"}, 400
+            )
+
         try:
-            status = calculate_sync_status(repo_path, token, parsed["owner"], parsed["repo"])
+            status = calculate_sync_status(
+                repo_path, token, parsed["owner"], parsed["repo"]
+            )
             self.send_json({"success": True, "sync": status})
         except Exception as e:
             self.send_json({"success": False, "error": str(e)}, 500)
@@ -906,22 +1286,32 @@ class GitControlRequestHandler(http.server.SimpleHTTPRequestHandler):
     def _api_github_issues_prs(self, query):
         repo_path = query.get("path", [""])[0]
         if not repo_path:
-            return self.send_json({"success": False, "error": "Path parameter required"}, 400)
+            return self.send_json(
+                {"success": False, "error": "Path parameter required"}, 400
+            )
         if not is_safe_path(repo_path):
-            return self.send_json({"success": False, "error": "Invalid or unauthorized path"}, 400)
-        
+            return self.send_json(
+                {"success": False, "error": "Invalid or unauthorized path"}, 400
+            )
+
         token = _get_token_from_request(self)
         if not token:
-            return self.send_json({"success": False, "error": "GitHub authentication required"}, 401)
-        
+            return self.send_json(
+                {"success": False, "error": "GitHub authentication required"}, 401
+            )
+
         url = get_repo_remote_url(repo_path)
         if not url:
-            return self.send_json({"success": False, "error": "No remote configured"}, 400)
-        
+            return self.send_json(
+                {"success": False, "error": "No remote configured"}, 400
+            )
+
         parsed = parse_github_remote(url)
         if not parsed:
-            return self.send_json({"success": False, "error": "Remote is not a GitHub repository"}, 400)
-        
+            return self.send_json(
+                {"success": False, "error": "Remote is not a GitHub repository"}, 400
+            )
+
         try:
             data = fetch_github_issues_prs(token, parsed["owner"], parsed["repo"])
             self.send_json({"success": True, **data})
@@ -937,9 +1327,13 @@ class GitControlRequestHandler(http.server.SimpleHTTPRequestHandler):
 
             repo_path = body.get("path")
             if not repo_path:
-                return self.send_json({"success": False, "error": "Path parameter required"}, 400)
+                return self.send_json(
+                    {"success": False, "error": "Path parameter required"}, 400
+                )
             if not is_safe_path(repo_path):
-                return self.send_json({"success": False, "error": "Invalid or unauthorized path"}, 400)
+                return self.send_json(
+                    {"success": False, "error": "Invalid or unauthorized path"}, 400
+                )
 
             routes = {
                 "/api/git/stage": self._api_git_stage,
@@ -960,24 +1354,34 @@ class GitControlRequestHandler(http.server.SimpleHTTPRequestHandler):
     def _api_git_stage(self, repo_path, body):
         files = body.get("files", [])
         if not files:
-            return self.send_json({"success": False, "error": "Files parameter required"}, 400)
+            return self.send_json(
+                {"success": False, "error": "Files parameter required"}, 400
+            )
         for f in files:
             if not is_safe_relative_path(f):
-                return self.send_json({"success": False, "error": "Invalid or unauthorized file path"}, 400)
-        
+                return self.send_json(
+                    {"success": False, "error": "Invalid or unauthorized file path"},
+                    400,
+                )
+
         with git_lock:
             r = Repo(repo_path)
-            rel_files = [f.encode('utf-8') for f in files]
+            rel_files = [f.encode("utf-8") for f in files]
             porcelain.add(r, rel_files)
         self.send_json({"success": True})
 
     def _api_git_unstage(self, repo_path, body):
         files = body.get("files", [])
         if not files:
-            return self.send_json({"success": False, "error": "Files parameter required"}, 400)
+            return self.send_json(
+                {"success": False, "error": "Files parameter required"}, 400
+            )
         for f in files:
             if not is_safe_relative_path(f):
-                return self.send_json({"success": False, "error": "Invalid or unauthorized file path"}, 400)
+                return self.send_json(
+                    {"success": False, "error": "Invalid or unauthorized file path"},
+                    400,
+                )
 
         with git_lock:
             r = Repo(repo_path)
@@ -988,7 +1392,9 @@ class GitControlRequestHandler(http.server.SimpleHTTPRequestHandler):
     def _api_git_commit(self, repo_path, body):
         message = body.get("message")
         if not message:
-            return self.send_json({"success": False, "error": "Commit message required"}, 400)
+            return self.send_json(
+                {"success": False, "error": "Commit message required"}, 400
+            )
 
         with git_lock:
             r = Repo(repo_path)
@@ -997,7 +1403,7 @@ class GitControlRequestHandler(http.server.SimpleHTTPRequestHandler):
             except Exception:
                 author = b"Godlike Controller <git@god.control>"
 
-            porcelain.commit(r, message=message.encode('utf-8'), author=author)
+            porcelain.commit(r, message=message.encode("utf-8"), author=author)
         self.send_json({"success": True})
 
     def _api_github_signin(self, body):
@@ -1008,7 +1414,13 @@ class GitControlRequestHandler(http.server.SimpleHTTPRequestHandler):
         try:
             result = fetch_github_profile(token)
             if not result.get("authenticated"):
-                return self.send_json({"success": False, "error": result.get("error", "Authentication failed")}, 401)
+                return self.send_json(
+                    {
+                        "success": False,
+                        "error": result.get("error", "Authentication failed"),
+                    },
+                    401,
+                )
             save_token(token, remember_me)
             self.send_json({"success": True, **result})
         except Exception as e:
@@ -1024,7 +1436,9 @@ class GitControlRequestHandler(http.server.SimpleHTTPRequestHandler):
     def _api_github_push(self, repo_path, body):
         token = body.get("token") or _get_token_from_request(self)
         if not token:
-            return self.send_json({"success": False, "error": "GitHub authentication required"}, 401)
+            return self.send_json(
+                {"success": False, "error": "GitHub authentication required"}, 401
+            )
         try:
             push_to_github(repo_path, token)
             self.send_json({"success": True})
@@ -1034,7 +1448,9 @@ class GitControlRequestHandler(http.server.SimpleHTTPRequestHandler):
     def _api_github_pull(self, repo_path, body):
         token = body.get("token") or _get_token_from_request(self)
         if not token:
-            return self.send_json({"success": False, "error": "GitHub authentication required"}, 401)
+            return self.send_json(
+                {"success": False, "error": "GitHub authentication required"}, 401
+            )
         try:
             pull_from_github(repo_path, token)
             self.send_json({"success": True})
@@ -1046,15 +1462,20 @@ class GitControlRequestHandler(http.server.SimpleHTTPRequestHandler):
         name = body.get("name")
         private = body.get("private", False)
         if not token:
-            return self.send_json({"success": False, "error": "GitHub authentication required"}, 401)
+            return self.send_json(
+                {"success": False, "error": "GitHub authentication required"}, 401
+            )
         if not name:
-            return self.send_json({"success": False, "error": "Repository name is required"}, 400)
+            return self.send_json(
+                {"success": False, "error": "Repository name is required"}, 400
+            )
         try:
             clone_url = create_github_repo_api(token, name, private)
             link_and_push_github_repo(repo_path, clone_url, token)
             self.send_json({"success": True, "cloneUrl": clone_url})
         except Exception as e:
             self.send_json({"success": False, "error": str(e)}, 500)
+
 
 if __name__ == "__main__":
     os.makedirs(PUBLIC_DIR, exist_ok=True)
