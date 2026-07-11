@@ -1,3 +1,5 @@
+**Status:** ✅ **Archived — Implemented & Verified** (2026-07-03)
+
 # Design Specification: App Launch & GUI Backend Dependencies
 
 This design document outlines the technical changes to resolve the application failing to open due to missing `pywebview` graphical backend dependencies.

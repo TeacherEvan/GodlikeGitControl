@@ -1,3 +1,5 @@
+**Status:** ✅ **Archived — Implemented & Verified** (2026-07-11)
+
 # Design: In-App Git Terminal
 
 Date: 2026-07-11
