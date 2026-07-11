@@ -306,6 +306,140 @@ def get_git_diff(repo_path: str, file_name: str, staged: bool = False) -> str:
         return out.getvalue().decode("utf-8")
 
 
+def get_branch_graph(repo_path: str, max_commits: int = 100) -> Dict[str, Any]:
+    """Enumerate local branches and walk history to build a commit DAG.
+
+    Args:
+        repo_path: Path to the git repository.
+        max_commits: Maximum number of commits to walk for the graph.
+
+    Returns:
+        A dictionary with ``branches`` (name, sha, is_head) and ``commits``
+        (sha, short_sha, message, author, timestamp, parents[]).
+    """
+    with git_lock:
+        r = Repo(repo_path)
+
+        # Enumerate local branch refs under refs/heads/
+        branches = []
+        try:
+            head_sha = r.head().decode("utf-8")
+        except Exception:
+            head_sha = None
+
+        for ref_name in r.refs.keys():
+            ref_bytes = ref_name if isinstance(ref_name, bytes) else ref_name.encode(
+                "utf-8"
+            )
+            if not ref_bytes.startswith(b"refs/heads/"):
+                continue
+            name = ref_bytes[len(b"refs/heads/") :].decode("utf-8")
+            try:
+                sha = r.refs[ref_bytes].decode("utf-8")
+            except Exception:
+                continue
+            branches.append(
+                {
+                    "name": name,
+                    "sha": sha,
+                    "is_head": (sha == head_sha),
+                }
+            )
+
+        # Walk commit history from all branch tips to build the DAG.
+        commits = []
+        seen = set()
+        try:
+            heads = [b["sha"].encode("utf-8") for b in branches if b["sha"]]
+            walker = r.get_walker(
+                include=heads if heads else None, max_entries=max_commits
+            )
+            for entry in walker:
+                c = entry.commit
+                sha = c.id.decode("utf-8")
+                if sha in seen:
+                    continue
+                seen.add(sha)
+                parents = [p.decode("utf-8") for p in c.parents]
+                commits.append(
+                    {
+                        "sha": sha,
+                        "short_sha": sha[:7],
+                        "message": c.message.decode("utf-8").strip().split("\n")[0],
+                        "author": c.author.decode("utf-8"),
+                        "timestamp": int(c.commit_time),
+                        "parents": parents,
+                    }
+                )
+        except KeyError:
+            pass
+
+        return {"branches": branches, "commits": commits}
+
+
+def create_branch(repo_path: str, name: str) -> None:
+    """Create a new branch at HEAD using dulwich porcelain.
+
+    Args:
+        repo_path: Path to the git repository.
+        name: New branch name.
+    """
+    if not name or name in (".", "..", "") or name.startswith("-") or " " in name:
+        raise Exception("Invalid branch name")
+    with git_lock:
+        r = Repo(repo_path)
+        porcelain.branch_create(r, name.encode("utf-8"))
+
+
+def switch_branch(repo_path: str, name: str) -> None:
+    """Check out an existing local branch using git (dulwich has limited checkout).
+
+    Args:
+        repo_path: Path to the git repository.
+        name: Branch name to switch to.
+    """
+    if not name:
+        raise Exception("Branch name required")
+    with git_lock:
+        try:
+            proc = subprocess.run(
+                ["git", "-C", repo_path, "checkout", name],
+                capture_output=True,
+                text=True,
+                shell=False,
+                timeout=GIT_TERMINAL_TIMEOUT,
+            )
+        except subprocess.TimeoutExpired:
+            raise Exception(f"Checkout exceeded {int(GIT_TERMINAL_TIMEOUT)}s timeout")
+        if proc.returncode != 0:
+            err = (proc.stderr or proc.stdout or "checkout failed").strip()
+            raise Exception(err)
+
+
+def delete_branch(repo_path: str, name: str) -> None:
+    """Delete a local branch ref using Dulwich Repo.refs.
+
+    Args:
+        repo_path: Path to the git repository.
+        name: Branch name to delete.
+    """
+    if not name:
+        raise Exception("Branch name required")
+    with git_lock:
+        r = Repo(repo_path)
+        # Prevent deleting the currently checked-out branch.
+        try:
+            active = porcelain.active_branch(r).decode("utf-8")
+        except Exception:
+            active = "master"
+        if name == active:
+            raise Exception("Cannot delete the currently active branch")
+        ref_key = b"refs/heads/" + name.encode("utf-8")
+        if ref_key not in r.refs:
+            raise Exception(f"Branch '{name}' does not exist")
+        del r.refs[ref_key]
+
+
 # Blocked git arguments that could escape the validated repo scope or alter the
 # execution path (resolves terminal escape-vector hardening).
 GIT_BLOCKED_ARGS = {
@@ -1227,6 +1361,7 @@ class GitControlRequestHandler(http.server.SimpleHTTPRequestHandler):
                 "/api/git/status": self._api_git_status,
                 "/api/git/log": self._api_git_log,
                 "/api/git/diff": self._api_git_diff,
+                "/api/git/branches": self._api_git_branches,
                 "/api/system/hardware": self._api_system_hardware,
                 "/api/github/profile": self._api_github_profile,
                 "/api/github/remote": self._api_github_remote,
@@ -1447,6 +1582,9 @@ class GitControlRequestHandler(http.server.SimpleHTTPRequestHandler):
                 "/api/git/unstage": self._api_git_unstage,
                 "/api/git/commit": self._api_git_commit,
                 "/api/git/terminal": self._api_git_terminal,
+                "/api/git/branch/create": self._api_git_branch_create,
+                "/api/git/branch/switch": self._api_git_branch_switch,
+                "/api/git/branch/delete": self._api_git_branch_delete,
                 "/api/github/push": self._api_github_push,
                 "/api/github/pull": self._api_github_pull,
                 "/api/github/publish": self._api_github_publish,
@@ -1458,6 +1596,55 @@ class GitControlRequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_json({"success": False, "error": "Endpoint not found"}, 404)
         except Exception as e:
             self.send_json({"success": False, "error": str(e)}, 500)
+
+    def _api_git_branches(self, query):
+        repo_path = query.get("path", [""])[0]
+        if not repo_path:
+            return self.send_json(
+                {"success": False, "error": "Path parameter required"}, 400
+            )
+        if not is_safe_path(repo_path):
+            return self.send_json(
+                {"success": False, "error": "Invalid or unauthorized path"}, 400
+            )
+        graph = get_branch_graph(repo_path)
+        self.send_json({"success": True, **graph})
+
+    def _api_git_branch_create(self, repo_path, body):
+        name = body.get("name")
+        if not name:
+            return self.send_json(
+                {"success": False, "error": "Branch name required"}, 400
+            )
+        try:
+            create_branch(repo_path, name)
+            self.send_json({"success": True, "name": name})
+        except Exception as e:
+            self.send_json({"success": False, "error": str(e)}, 200)
+
+    def _api_git_branch_switch(self, repo_path, body):
+        name = body.get("name")
+        if not name:
+            return self.send_json(
+                {"success": False, "error": "Branch name required"}, 400
+            )
+        try:
+            switch_branch(repo_path, name)
+            self.send_json({"success": True, "name": name})
+        except Exception as e:
+            self.send_json({"success": False, "error": str(e)}, 200)
+
+    def _api_git_branch_delete(self, repo_path, body):
+        name = body.get("name")
+        if not name:
+            return self.send_json(
+                {"success": False, "error": "Branch name required"}, 400
+            )
+        try:
+            delete_branch(repo_path, name)
+            self.send_json({"success": True, "name": name})
+        except Exception as e:
+            self.send_json({"success": False, "error": str(e)}, 200)
 
     def _api_git_stage(self, repo_path, body):
         files = body.get("files", [])

@@ -159,5 +159,34 @@ const API = {
             method: "POST",
             body: JSON.stringify({ path, command })
         });
+    },
+
+    // Branch graph data (commits + branch refs)
+    async getBranches(path) {
+        return this.request(`/api/git/branches?path=${encodeURIComponent(path)}`);
+    },
+
+    // Create a new branch at HEAD
+    async createBranch(path, name) {
+        return this.request("/api/git/branch/create", {
+            method: "POST",
+            body: JSON.stringify({ path, name })
+        });
+    },
+
+    // Switch (checkout) an existing branch
+    async switchBranch(path, name) {
+        return this.request("/api/git/branch/switch", {
+            method: "POST",
+            body: JSON.stringify({ path, name })
+        });
+    },
+
+    // Delete a local branch
+    async deleteBranch(path, name) {
+        return this.request("/api/git/branch/delete", {
+            method: "POST",
+            body: JSON.stringify({ path, name })
+        });
     }
 };

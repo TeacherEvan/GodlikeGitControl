@@ -241,19 +241,22 @@ const StatusView = {
             const st = statusResponse.status;
 
             this.branchBadge.textContent = escapeHtml(st.branch);
-            
+
             const stagedAdded = st.staged.add || [];
             const stagedDeleted = st.staged.delete || [];
             const stagedModified = st.staged.modify || [];
+            const unstaged = st.unstaged || [];
+            const untracked = st.untracked || [];
+
             const totalStaged = stagedAdded.length + stagedDeleted.length + stagedModified.length;
+            this.renderBulkBar(unstaged, untracked, stagedAdded, stagedModified, stagedDeleted);
+
             this.stagedCount.textContent = totalStaged;
             this.renderStagedList(stagedAdded, stagedDeleted, stagedModified);
 
-            const unstaged = st.unstaged || [];
             this.unstagedCount.textContent = unstaged.length;
             this.renderUnstagedList(unstaged);
 
-            const untracked = st.untracked || [];
             this.untrackedCount.textContent = untracked.length;
             this.renderUntrackedList(untracked);
 
@@ -284,9 +287,87 @@ const StatusView = {
         }
     },
 
+    // Bulk action bar: stage all / unstage all
+    renderBulkBar(unstaged, untracked, stagedAdded, stagedModified, stagedDeleted) {
+        const existing = document.getElementById("bulk-action-bar");
+        if (existing) existing.remove();
+
+        const allUnstaged = [...unstaged, ...untracked];
+        const totalStaged = stagedAdded.length + stagedModified.length + stagedDeleted.length;
+        if (allUnstaged.length === 0 && totalStaged === 0) return;
+
+        const bar = document.createElement("div");
+        bar.className = "bulk-action-bar";
+        bar.id = "bulk-action-bar";
+
+        if (allUnstaged.length > 0) {
+            const stageAll = document.createElement("button");
+            stageAll.className = "ghost-btn";
+            stageAll.textContent = `Stage All (${allUnstaged.length})`;
+            stageAll.addEventListener("click", async () => {
+                this.setUILocked(true);
+                try {
+                    await API.stageFiles(this.currentRepoPath, allUnstaged);
+                    this.refresh();
+                } catch (e) {
+                    Toast.error(`Stage all failed: ${e.message}`);
+                    this.setUILocked(false);
+                }
+            });
+            bar.appendChild(stageAll);
+        }
+
+        if (totalStaged > 0) {
+            const unstageAll = document.createElement("button");
+            unstageAll.className = "ghost-btn";
+            unstageAll.textContent = `Unstage All (${totalStaged})`;
+            unstageAll.addEventListener("click", async () => {
+                this.setUILocked(true);
+                try {
+                    const files = [...stagedAdded, ...stagedModified, ...stagedDeleted];
+                    await API.unstageFiles(this.currentRepoPath, files);
+                    this.refresh();
+                } catch (e) {
+                    Toast.error(`Unstage all failed: ${e.message}`);
+                    this.setUILocked(false);
+                }
+            });
+            bar.appendChild(unstageAll);
+        }
+
+        const summaryBar = document.querySelector(".status-summary-bar");
+        if (summaryBar && summaryBar.parentNode) {
+            summaryBar.parentNode.insertBefore(bar, summaryBar.nextSibling);
+        }
+    },
+
+    // Inline expandable diff under a file row (no full navigation swap)
+    async toggleInlineDiff(rowEl, repoPath, file, staged) {
+        const existing = rowEl.querySelector(".file-inline-diff");
+        if (existing) {
+            existing.remove();
+            return;
+        }
+        const holder = document.createElement("div");
+        holder.className = "file-inline-diff";
+        holder.innerHTML = `<pre><span style="color:var(--text-secondary);font-style:italic;">Loading diff…</span></pre>`;
+        rowEl.appendChild(holder);
+        try {
+            const data = await API.getDiff(repoPath, file, staged);
+            const raw = data.diff || "";
+            if (!raw.trim()) {
+                holder.innerHTML = `<pre><span style="color:var(--text-secondary);font-style:italic;">No diff (untracked or identical file).</span></pre>`;
+                return;
+            }
+            holder.innerHTML = `<pre>${DiffView.formatDiff(raw)}</pre>`;
+        } catch (e) {
+            holder.innerHTML = `<pre style="color:var(--color-deleted);">Error: ${escapeHtml(e.message)}</pre>`;
+        }
+    },
+
     renderStagedList(added, deleted, modified) {
         this.stagedList.innerHTML = "";
-        
+
         if (added.length === 0 && deleted.length === 0 && modified.length === 0) {
             this.stagedList.innerHTML = `<p class="empty-msg">No files staged for commit.</p>`;
             return;
@@ -295,20 +376,21 @@ const StatusView = {
         const addFileRow = (file, badgeText, badgeClass) => {
             const row = document.createElement("div");
             row.className = "file-item";
-            
+
             // XSS Prevention: Safe HTML composition with escaped values
             const escapedFile = escapeHtml(file);
             const escapedBadgeClass = escapeHtml(badgeClass);
             const escapedBadgeText = escapeHtml(badgeText);
-            
+
             row.innerHTML = `
                 <div class="file-item-left">
                     <input type="checkbox" class="file-checkbox staged-checkbox" checked data-file="${escapedFile}">
                     <span class="file-name staged-name" data-file="${escapedFile}">${escapedFile}</span>
+                    <span class="inline-diff-toggle" data-file="${escapedFile}">diff</span>
                 </div>
                 <span class="file-badge ${escapedBadgeClass}">${escapedBadgeText}</span>
             `;
-            
+
             const checkbox = row.querySelector(".staged-checkbox");
             checkbox.addEventListener("change", async () => {
                 this.setUILocked(true);
@@ -323,6 +405,11 @@ const StatusView = {
 
             row.querySelector(".staged-name").addEventListener("click", () => {
                 DiffView.showDiff(this.currentRepoPath, file, true);
+            });
+
+            row.querySelector(".inline-diff-toggle").addEventListener("click", (ev) => {
+                ev.stopPropagation();
+                this.toggleInlineDiff(row, this.currentRepoPath, file, true);
             });
 
             this.stagedList.appendChild(row);
@@ -350,6 +437,7 @@ const StatusView = {
                 <div class="file-item-left">
                     <input type="checkbox" class="file-checkbox unstaged-checkbox" data-file="${escapedFile}">
                     <span class="file-name unstaged-name" data-file="${escapedFile}">${escapedFile}</span>
+                    <span class="inline-diff-toggle" data-file="${escapedFile}">diff</span>
                 </div>
                 <span class="file-badge badge-m">M</span>
             `;
@@ -368,6 +456,11 @@ const StatusView = {
 
             row.querySelector(".unstaged-name").addEventListener("click", () => {
                 DiffView.showDiff(this.currentRepoPath, file, false);
+            });
+
+            row.querySelector(".inline-diff-toggle").addEventListener("click", (ev) => {
+                ev.stopPropagation();
+                this.toggleInlineDiff(row, this.currentRepoPath, file, false);
             });
 
             this.unstagedList.appendChild(row);

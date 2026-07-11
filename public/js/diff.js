@@ -35,41 +35,58 @@ const DiffView = {
         this.currentRepoPath = repoPath;
         this.filenameLabel.textContent = `${fileName} ${staged ? '(Staged)' : '(Modified)'}`;
         this.contentPre.innerHTML = `<div class="spinner" style="margin:20px auto;"></div>Loading diff...`;
-        
+
         this.show();
 
         try {
             const data = await API.getDiff(repoPath, fileName, staged);
             const rawDiff = data.diff;
-            
+
             if (!rawDiff || rawDiff.trim() === "") {
                 this.contentPre.innerHTML = `<span style="color:var(--text-secondary); font-style:italic;">No changes to show. File is identical or untracked.</span>`;
                 return;
             }
 
-            // Split lines and highlight additions/deletions
-            const lines = rawDiff.split("\n");
-            const formattedLines = lines.map(line => {
-                // Escape HTML tags to prevent broken injection
-                const escapedLine = line
-                    .replace(/&/g, "&amp;")
-                    .replace(/</g, "&lt;")
-                    .replace(/>/g, "&gt;");
-
-                if (escapedLine.startsWith("+") && !escapedLine.startsWith("+++")) {
-                    return `<div class="diff-line-added">${escapedLine}</div>`;
-                } else if (escapedLine.startsWith("-") && !escapedLine.startsWith("---")) {
-                    return `<div class="diff-line-removed">${escapedLine}</div>`;
-                } else if (escapedLine.startsWith("@@")) {
-                    return `<div class="diff-line-header">${escapedLine}</div>`;
-                }
-                return `<div>${escapedLine}</div>`;
-            });
-
-            this.contentPre.innerHTML = formattedLines.join("");
+            this.contentPre.innerHTML = this.formatDiff(rawDiff);
         } catch (error) {
             this.contentPre.innerHTML = `<span style="color:var(--color-deleted);">Error loading diff: ${error.message}</span>`;
             Toast.error(`Failed to load diff: ${error.message}`);
         }
+    },
+
+    // Render a diff directly into an arbitrary container element (inline view).
+    async renderInline(container, repoPath, fileName, staged = false) {
+        container.innerHTML = `<pre><span style="color:var(--text-secondary);font-style:italic;">Loading diff…</span></pre>`;
+        try {
+            const data = await API.getDiff(repoPath, fileName, staged);
+            const rawDiff = data.diff || "";
+            if (!rawDiff.trim()) {
+                container.innerHTML = `<pre><span style="color:var(--text-secondary);font-style:italic;">No diff (untracked or identical file).</span></pre>`;
+                return;
+            }
+            container.innerHTML = `<pre>${this.formatDiff(rawDiff)}</pre>`;
+        } catch (error) {
+            container.innerHTML = `<pre style="color:var(--color-deleted);">Error: ${escapeHtml(error.message)}</pre>`;
+        }
+    },
+
+    formatDiff(rawDiff) {
+        const lines = rawDiff.split("\n");
+        return lines.map(line => {
+            // Escape HTML tags to prevent broken injection
+            const escapedLine = line
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;");
+
+            if (escapedLine.startsWith("+") && !escapedLine.startsWith("+++")) {
+                return `<div class="diff-line-added">${escapedLine}</div>`;
+            } else if (escapedLine.startsWith("-") && !escapedLine.startsWith("---")) {
+                return `<div class="diff-line-removed">${escapedLine}</div>`;
+            } else if (escapedLine.startsWith("@@")) {
+                return `<div class="diff-line-header">${escapedLine}</div>`;
+            }
+            return `<div>${escapedLine}</div>`;
+        }).join("");
     }
 };

@@ -692,5 +692,150 @@ class TestSyncCredentialScrub(unittest.TestCase):
         self._assert_token_scrubbed()
 
 
+class TestBranchEndpoints(unittest.TestCase):
+    """Tests for /api/git/branches, /create, /switch, /delete via the live server."""
+
+    server_process: Optional[subprocess.Popen] = None
+    temp_dir: str
+    repo_path: str
+    test_port: int
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        import socket
+
+        cls.temp_dir = tempfile.mkdtemp()
+        cls.repo_path = os.path.join(cls.temp_dir, "branch_repo")
+        os.makedirs(cls.repo_path, exist_ok=True)
+        cls.repo = Repo.init(cls.repo_path)
+
+        init_file = os.path.join(cls.repo_path, "init.txt")
+        with open(init_file, "w") as f:
+            f.write("initial file")
+        porcelain.add(cls.repo, [b"init.txt"])
+        porcelain.commit(
+            cls.repo, message=b"Initial commit", author=b"Setup <setup@test.com>"
+        )
+
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.bind(("127.0.0.1", 0))
+        cls.test_port = s.getsockname()[1]
+        s.close()
+
+        os.environ["GGC_PORT"] = str(cls.test_port)
+        os.environ["GGC_TESTING"] = "true"
+
+        cls.test_home = os.path.join(cls.temp_dir, "ggc_home")
+        os.makedirs(cls.test_home, exist_ok=True)
+        os.environ["HOME"] = cls.test_home
+
+        root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        server_env = os.environ.copy()
+        server_env["HOME"] = cls.test_home
+        cls.server_process = subprocess.Popen(
+            [sys.executable, "server.py"],
+            cwd=root_dir,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            env=server_env,
+        )
+
+        start_time = time.time()
+        while time.time() - start_time < 5.0:
+            try:
+                with socket.create_connection(
+                    ("127.0.0.1", cls.test_port), timeout=0.5
+                ):
+                    break
+            except (ConnectionRefusedError, socket.timeout):
+                time.sleep(0.1)
+        else:
+            raise RuntimeError(f"Failed to start test server on port {cls.test_port}")
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        shutil.rmtree(cls.temp_dir, ignore_errors=True)
+        if cls.server_process:
+            cls.server_process.terminate()
+            cls.server_process.wait()
+
+    def get_json(self, path: str) -> Dict[str, Any]:
+        url = f"http://127.0.0.1:{self.test_port}{path}"
+        req = urllib.request.Request(url, method="GET")
+        with urllib.request.urlopen(req) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+
+    def post_json(self, path: str, body: Dict[str, Any]) -> Dict[str, Any]:
+        url = f"http://127.0.0.1:{self.test_port}{path}"
+        data_bytes = json.dumps(body).encode("utf-8")
+        req = urllib.request.Request(url, data=data_bytes, method="POST")
+        req.add_header("Content-Type", "application/json")
+        req.add_header("Origin", f"http://127.0.0.1:{self.test_port}")
+        with urllib.request.urlopen(req) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+
+    def test_01_branches_lists_master(self):
+        """GET /api/git/branches returns the master branch and its commits."""
+        data = self.get_json(
+            f"/api/git/branches?path={urllib.parse.quote(self.repo_path)}"
+        )
+        self.assertTrue(data["success"])
+        names = [b["name"] for b in data["branches"]]
+        self.assertIn("master", names)
+        head = [b for b in data["branches"] if b["is_head"]]
+        self.assertEqual(len(head), 1)
+        self.assertGreaterEqual(len(data["commits"]), 1)
+
+    def test_02_create_branch(self):
+        """POST /api/git/branch/create adds a new local branch."""
+        data = self.post_json(
+            "/api/git/branch/create",
+            {"path": self.repo_path, "name": "feature/x"},
+        )
+        self.assertTrue(data["success"])
+        listing = self.get_json(
+            f"/api/git/branches?path={urllib.parse.quote(self.repo_path)}"
+        )
+        self.assertIn("feature/x", [b["name"] for b in listing["branches"]])
+
+    def test_03_switch_branch(self):
+        """POST /api/git/branch/switch checks out an existing branch."""
+        data = self.post_json(
+            "/api/git/branch/switch",
+            {"path": self.repo_path, "name": "feature/x"},
+        )
+        self.assertTrue(data["success"])
+        listing = self.get_json(
+            f"/api/git/branches?path={urllib.parse.quote(self.repo_path)}"
+        )
+        head = [b for b in listing["branches"] if b["is_head"]]
+        self.assertEqual(head[0]["name"], "feature/x")
+
+    def test_04_delete_branch(self):
+        """POST /api/git/branch/delete removes a non-active branch."""
+        # Switch back to master first so feature/x is not active.
+        self.post_json(
+            "/api/git/branch/switch",
+            {"path": self.repo_path, "name": "master"},
+        )
+        data = self.post_json(
+            "/api/git/branch/delete",
+            {"path": self.repo_path, "name": "feature/x"},
+        )
+        self.assertTrue(data["success"])
+        listing = self.get_json(
+            f"/api/git/branches?path={urllib.parse.quote(self.repo_path)}"
+        )
+        self.assertNotIn("feature/x", [b["name"] for b in listing["branches"]])
+
+    def test_05_delete_active_branch_rejected(self):
+        """Deleting the currently active branch is rejected."""
+        data = self.post_json(
+            "/api/git/branch/delete",
+            {"path": self.repo_path, "name": "master"},
+        )
+        self.assertFalse(data["success"])
+
+
 if __name__ == "__main__":
     unittest.main()
