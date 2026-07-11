@@ -549,6 +549,68 @@ class TestGodlikeGitControl(unittest.TestCase):
         self.assertTrue(data["success"])
         self.assertFalse(data["authenticated"])
 
+    def test_11_git_terminal(self):
+        """Git-scoped in-app terminal: runs git, rejects non-git, path overrides, unsafe paths."""
+        # 1. Valid git command returns success with output naming the branch.
+        data = self.post_json(
+            "/api/git/terminal",
+            {"path": self.repo_path, "command": "git status"},
+        )
+        self.assertTrue(data["success"])
+        self.assertEqual(data["returncode"], 0)
+        self.assertIn("master", data["stdout"] + data["stderr"])
+
+        # 2. Self-contained: create a file, add+commit it through the terminal,
+        #    then confirm it appears at HEAD of `git log`.
+        terminal_file = os.path.join(self.repo_path, "terminal_test.txt")
+        with open(terminal_file, "w") as f:
+            f.write("terminal test contents\n")
+        data = self.post_json(
+            "/api/git/terminal",
+            {"path": self.repo_path, "command": "git add terminal_test.txt"},
+        )
+        self.assertTrue(data["success"])
+        data = self.post_json(
+            "/api/git/terminal",
+            {
+                "path": self.repo_path,
+                "command": "git -c user.email=test@ggc -c user.name=GGC commit -m terminal-test-commit",
+            },
+        )
+        self.assertTrue(data["success"])
+        self.assertEqual(data["returncode"], 0)
+        data = self.post_json(
+            "/api/git/terminal",
+            {"path": self.repo_path, "command": "git log --oneline -n 1"},
+        )
+        self.assertTrue(data["success"])
+        self.assertEqual(data["returncode"], 0)
+        self.assertIn("terminal-test-commit", data["stdout"] + data["stderr"])
+
+        # 3. Non-git command is rejected (only `git` allowed).
+        data = self.post_json(
+            "/api/git/terminal",
+            {"path": self.repo_path, "command": "echo hi"},
+        )
+        self.assertFalse(data["success"])
+
+        # 4. Path-override argument is blocked (-C escaping the repo).
+        data = self.post_json(
+            "/api/git/terminal",
+            {"path": self.repo_path, "command": "git -C /etc status"},
+        )
+        self.assertFalse(data["success"])
+
+        # 5. Unsafe repo path is rejected (reuses is_safe_path guard).
+        try:
+            self.post_json(
+                "/api/git/terminal",
+                {"path": "/etc", "command": "git status"},
+            )
+            self.fail("Server accepted terminal command against /etc")
+        except urllib.error.HTTPError as e:
+            self.assertEqual(e.code, 400)
+
 
 class TestSyncCredentialScrub(unittest.TestCase):
     """Unit tests for push/pull token handling (BUG#2, #8) — no HTTP, no real GitHub."""

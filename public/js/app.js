@@ -11,6 +11,7 @@ document.addEventListener("DOMContentLoaded", () => {
     CommitPanel.init();
     HardwareMonitor.init();
     GitHubController.init();
+    TerminalView.init();
 
     // 3. Bind global layout events
     const homeBtn = document.getElementById("btn-home");

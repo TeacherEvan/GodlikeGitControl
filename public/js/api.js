@@ -151,5 +151,13 @@ const API = {
             method: "POST",
             body: JSON.stringify({ path, name, private })
         });
+    },
+
+    // In-app git terminal (git-scoped, repo-bound)
+    async gitTerminal(path, command) {
+        return this.request("/api/git/terminal", {
+            method: "POST",
+            body: JSON.stringify({ path, command })
+        });
     }
 };

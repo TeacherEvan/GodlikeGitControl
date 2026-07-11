@@ -9,6 +9,8 @@ import io
 import time
 import platform
 import threading
+import shlex
+import subprocess
 from typing import List, Dict, Tuple, Optional, Any, Union
 import psutil
 from dulwich.repo import Repo
@@ -302,6 +304,87 @@ def get_git_diff(repo_path: str, file_name: str, staged: bool = False) -> str:
             r, outstream=out, staged=staged, paths=[file_name.encode("utf-8")]
         )
         return out.getvalue().decode("utf-8")
+
+
+# Blocked git arguments that could escape the validated repo scope or alter the
+# execution path (resolves terminal escape-vector hardening).
+GIT_BLOCKED_ARGS = {
+    "-C",
+    "--git-dir",
+    "--work-tree",
+    "--namespace",
+    "--upload-pack",
+    "--receive-pack",
+    "--exec-path",
+}
+GIT_TERMINAL_TIMEOUT = 30.0
+GIT_TERMINAL_MAX_OUTPUT = 200 * 1024  # 200KB output cap before truncation
+
+
+def run_git_terminal(repo_path: str, command: str) -> Dict[str, Any]:
+    """Run a git-scoped command inside the given repository and capture output.
+
+    Only commands whose first token is ``git`` are permitted; path-override and
+    execution-path arguments are blocked so the command cannot escape the
+    validated repo. Runs without a shell (shell=False) to prevent injection.
+
+    Args:
+        repo_path: Path to the git repository.
+        command: The raw command string the user typed.
+
+    Returns:
+        Dict with keys: command, stdout, stderr, returncode, truncated.
+    """
+    command = (command or "").strip()
+    if not command:
+        raise Exception("Empty command")
+
+    try:
+        parts = shlex.split(command)
+    except ValueError as e:
+        raise Exception(f"Cannot parse command: {e}")
+
+    if not parts or parts[0] != "git":
+        raise Exception("Only 'git' commands are permitted in the terminal")
+
+    # Reject path-override / execution-path escape arguments.
+    for arg in parts[1:]:
+        base = arg.split("=")[0]
+        if base in GIT_BLOCKED_ARGS:
+            raise Exception(f"Blocked git argument: {arg}")
+
+    with git_lock:
+        try:
+            proc = subprocess.run(
+                ["git", "-C", repo_path, *parts[1:]],
+                cwd=repo_path,
+                capture_output=True,
+                text=True,
+                shell=False,
+                timeout=GIT_TERMINAL_TIMEOUT,
+            )
+        except subprocess.TimeoutExpired:
+            raise Exception(
+                f"Command exceeded {int(GIT_TERMINAL_TIMEOUT)}s timeout"
+            )
+
+    stdout = proc.stdout or ""
+    stderr = proc.stderr or ""
+    truncated = False
+    if len(stdout) > GIT_TERMINAL_MAX_OUTPUT:
+        stdout = stdout[:GIT_TERMINAL_MAX_OUTPUT] + "\n… [output truncated]"
+        truncated = True
+    if len(stderr) > GIT_TERMINAL_MAX_OUTPUT:
+        stderr = stderr[:GIT_TERMINAL_MAX_OUTPUT] + "\n… [output truncated]"
+        truncated = True
+
+    return {
+        "command": command,
+        "stdout": stdout,
+        "stderr": stderr,
+        "returncode": proc.returncode,
+        "truncated": truncated,
+    }
 
 
 def _get_cpu_freq() -> Optional[Dict[str, float]]:
@@ -1363,6 +1446,7 @@ class GitControlRequestHandler(http.server.SimpleHTTPRequestHandler):
                 "/api/git/stage": self._api_git_stage,
                 "/api/git/unstage": self._api_git_unstage,
                 "/api/git/commit": self._api_git_commit,
+                "/api/git/terminal": self._api_git_terminal,
                 "/api/github/push": self._api_github_push,
                 "/api/github/pull": self._api_github_pull,
                 "/api/github/publish": self._api_github_publish,
@@ -1429,6 +1513,20 @@ class GitControlRequestHandler(http.server.SimpleHTTPRequestHandler):
 
             porcelain.commit(r, message=message.encode("utf-8"), author=author)
         self.send_json({"success": True})
+
+    def _api_git_terminal(self, repo_path, body):
+        command = body.get("command")
+        if not command:
+            return self.send_json(
+                {"success": False, "error": "Command parameter required"}, 400
+            )
+        try:
+            result = run_git_terminal(repo_path, command)
+            self.send_json({"success": True, **result})
+        except Exception as e:
+            # Command-level rejection (non-git, blocked arg) is a logical outcome
+            # the terminal UI displays — not a transport error.
+            self.send_json({"success": False, "error": str(e)}, 200)
 
     def _api_github_signin(self, body):
         token = body.get("token")

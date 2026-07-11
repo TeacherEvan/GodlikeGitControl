@@ -70,6 +70,11 @@ const StatusView = {
             CommitPanel.open();
         });
 
+        const termBtn = document.getElementById("btn-toggle-terminal");
+        if (termBtn) {
+            termBtn.addEventListener("click", () => TerminalView.toggle());
+        }
+
         // GitHub Operation Bindings
         const pushBtn = document.getElementById("btn-github-push");
         if (pushBtn) {
@@ -192,7 +197,11 @@ const StatusView = {
         this.currentRepoPath = path;
         this.repoPathLabel.textContent = path;
         this.repoTitle.textContent = path.split("/").pop() || "Repository";
-        
+
+        TerminalView.setRepoPath(path);
+        const terminalRepo = document.getElementById("terminal-repo");
+        if (terminalRepo) terminalRepo.textContent = path.split("/").pop() || "Repository";
+
         this.show();
         this.refresh();
         this.checkGitHubRemote();

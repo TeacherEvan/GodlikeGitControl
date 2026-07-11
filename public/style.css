@@ -871,6 +871,79 @@ textarea {
     font-weight: 600;
 }
 
+/* In-app Git Terminal */
+#terminal-card {
+    margin-top: 16px;
+}
+
+.terminal-output {
+    background: #0a0a0c;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 6px;
+    padding: 10px 12px;
+    height: 260px;
+    overflow-y: auto;
+    font-family: "Courier New", monospace;
+    font-size: 12.5px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: #d0d0d0;
+}
+
+.term-line {
+    margin: 0;
+}
+
+.term-cmd {
+    color: #FFD700;
+    font-weight: 600;
+}
+
+.term-out {
+    color: #d0d0d0;
+}
+
+.term-err {
+    color: #E57373;
+}
+
+.term-intro {
+    color: #8a8a8a;
+    font-style: italic;
+}
+
+.term-muted {
+    color: #6a6a6a;
+}
+
+.terminal-input-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    background: #0a0a0c;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 6px;
+    padding: 8px 12px;
+}
+
+.terminal-prompt {
+    color: #FFD700;
+    font-family: "Courier New", monospace;
+    font-weight: 700;
+}
+
+.terminal-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #fff;
+    font-family: "Courier New", monospace;
+    font-size: 12.5px;
+}
+
 /* 6. Modal overlay styling */
 .modal-overlay {
     position: absolute;

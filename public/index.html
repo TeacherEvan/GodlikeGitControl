@@ -298,6 +298,7 @@
             <!-- Action buttons -->
             <div class="status-action-bar">
                 <button class="gold-btn large-btn" id="btn-open-commit-panel">Commit Staged</button>
+                <button class="gold-btn large-btn" id="btn-toggle-terminal">Terminal</button>
             </div>
 
             <!-- Commit History Logs list -->
@@ -307,6 +308,19 @@
                 </div>
                 <div class="commit-logs" id="commit-logs-list">
                     <!-- Dynamic logs -->
+                </div>
+            </div>
+
+            <!-- In-app Git Terminal -->
+            <div class="section-card index-card hidden" id="terminal-card">
+                <div class="section-card-header">
+                    <h3>Git Terminal</h3>
+                    <span class="badge branch-badge" id="terminal-repo">repo</span>
+                </div>
+                <div class="terminal-output" id="terminal-output"></div>
+                <div class="terminal-input-row">
+                    <span class="terminal-prompt">$</span>
+                    <input type="text" id="terminal-input" class="terminal-input" placeholder="git status" spellcheck="false" autocomplete="off">
                 </div>
             </div>
         </section>
