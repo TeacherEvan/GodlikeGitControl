@@ -15,6 +15,12 @@ venv/
 .pytest_cache/
 .ruff_cache/
 
+# Code-review skill advisory artifacts (not project source; do not commit)
+audit_report.md
+review_findings.md
+investigation_report.md
+fix_summary.md
+
 # IDE Configuration Settings
 .vscode/
 .idea/
