@@ -1,14 +1,28 @@
 # God's Git-Control (GodlikeGitControl)
 
 A cinematic, gold-stoic themed Progressive Web App (PWA) and native desktop window for viewing and controlling local Git repository status.
+<img width="1274" height="902" alt="Screenshot from 2026-08-29 10-54-57" src="https://github.com/user-attachments/assets/d383e4d2-d847-4d57-ae35-543a81df12b5" />
+
 
 Built with a lightweight Python backend using the pure-Python Git client `dulwich` and a vanilla HTML/CSS/JS frontend SPA. A native desktop launcher (`app_window.py`, pywebview) wraps the same backend in a standalone window.
 
 ## Features
 - **Cinematic Welcome screen** on launch with golden particle effects and transitions.
+<img width="411" height="487" alt="Screenshot from 2026-08-29 10-55-24" src="https://github.com/user-attachments/assets/fde8b089-a6e8-468e-96bd-11373220a09c" />
+#####################################
 - **System Scan**: Discovers Git repositories under the home directory (up to 4 levels deep).
+- <img width="1255" height="836" alt="Screenshot from 2026-08-29 10-57-09" src="https://github.com/user-attachments/assets/7c71d28c-8bf5-4803-9836-1e9e8f67c6da" />
+##########################################################
+- <img width="1255" height="836" alt="Screenshot from 2026-08-29 10-57-26" src="https://github.com/user-attachments/assets/55370400-69d4-49db-a528-b96b7aad5068" />
+################################################################
 - **Go to Location**: Navigate to any directory path on the local system and verify if it is a Git repository.
+- <img width="973" height="754" alt="Screenshot from 2026-08-29 10-55-48" src="https://github.com/user-attachments/assets/a26e5b2d-3198-4b1e-a628-1ca96cc210dd" />
+###################################################################
 - **Git status details**: Displays staged, unstaged, modified, and untracked files with status badges.
+- <img width="1255" height="836" alt="Screenshot from 2026-08-29 10-58-42" src="https://github.com/user-attachments/assets/825e26ed-9111-4cb1-8bc7-9230f6b9345a" />
+################################################
+
+
 - **Git action triggers**: Stage individual or all files, unstage files, and commit directly from the UI.
 - **Commit history viewer**: Displays recent commits.
 - **File Diff viewer**: View diffs of changed files with line-by-line colored diffs.
