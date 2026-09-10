@@ -27,3 +27,6 @@ fix_summary.md
 
 # Committed benchmark noise
 tests/performance_report.json
+
+# V2 audit scratch dir (local run output, never commit)
+docs/.scratch-audit/

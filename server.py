@@ -327,6 +327,21 @@ def get_branch_graph(repo_path: str, max_commits: int = 100) -> Dict[str, Any]:
         except Exception:
             head_sha = None
 
+        # Resolve the symbolic HEAD ref (refs/heads/<name>) so the active branch
+        # is identified by name, not by matching the tip SHA. Two branches at the
+        # same commit (common after checkout) would otherwise both claim
+        # is_head=true when compared by SHA alone (BUG#3).
+        head_branch_name = None
+        try:
+            # refs.follow returns the symbolic chain: ([b"HEAD", b"refs/heads/<name>"], oid)
+            head_chain, _ = r.refs.follow(b"HEAD")
+            for ref in head_chain:
+                if isinstance(ref, bytes) and ref.startswith(b"refs/heads/"):
+                    head_branch_name = ref[len(b"refs/heads/") :].decode("utf-8")
+                    break
+        except Exception:
+            head_branch_name = None
+
         for ref_name in r.refs.keys():
             ref_bytes = ref_name if isinstance(ref_name, bytes) else ref_name.encode(
                 "utf-8"
@@ -342,7 +357,9 @@ def get_branch_graph(repo_path: str, max_commits: int = 100) -> Dict[str, Any]:
                 {
                     "name": name,
                     "sha": sha,
-                    "is_head": (sha == head_sha),
+                    "is_head": (
+                        head_branch_name is not None and name == head_branch_name
+                    ),
                 }
             )
 
