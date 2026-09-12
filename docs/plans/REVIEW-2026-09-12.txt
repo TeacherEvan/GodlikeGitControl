@@ -1,0 +1,65 @@
+=== CODE REVIEW — GodlikeGitControl (2026-09-12) ===
+Scope: full tree (server.py 1816, app_window.py 54, public/js/* 4616, tests 18 tests)
+Trigger: surgical-implementation dispatcher — all plans archived/complete, no open plan files.
+
+--- AXIS 1: CORRECTNESS ---
+[PASS] test_suite.py: 18/18 tests pass (pytest, 1.97s). Covers hardware, fs browse,
+      git workflow (stage/unstage/commit/log), latency, path-traversal (backslash),
+      CSRF (non-JSON, malicious origin, missing headers), concurrent git ops,
+      GitHub auth/publish/push/pull/signout, credentials isolation, git terminal
+      (valid/self-contained/non-git/-C block/unsafe path), token scrubbing (BUG#2),
+      branch CRUD + active-branch-delete rejection.
+[PASS] get_branch_graph uses refs.follow(b"HEAD") symbolic chain to identify the
+      active branch by NAME, not tip SHA (BUG#3 fix). Verified at server.py:337-350.
+      Frontend consumes b.is_head consistently (branches.js:38,55,61,64,70;
+      branch-graph.js:190,195).
+
+--- AXIS 2: READABILITY ---
+[WARN] 48 bare `except Exception` blocks across server.py. Most are in I/O or
+      dulwich calls where broad catch is defensible, but some (e.g. line 35 in
+      cpu_polling_daemon, line 78 in is_safe_path) swallow real errors silently.
+      Recommend narrowing to specific exceptions where feasible.
+[INFO] No dead code, no TODO/FIXME/placeholder/stub markers found (rg scan clean).
+      All 27 functions in server.py are reachable and exercised by tests.
+
+--- AXIS 3: ARCHITECTURE ---
+[PASS] Clean separation: server.py = HTTP + business logic (module-level functions,
+      not static methods — resolves prior review finding). Frontend is a vanilla
+      SPA with per-view JS modules; no framework coupling.
+[PASS] Shared guard `_resolve_github_repo` (server.py:1478) deduplicates path-safety
+      + token + remote checks across sync_status and issues_prs.
+[PASS] git_lock (RLock) serializes all repo mutations; concurrency test (test_07)
+      confirms 20 threads, 0 errors.
+
+--- AXIS 4: SECURITY ---
+[PASS] Path traversal: is_safe_path blocks /etc /proc /sys /dev /boot /var/log
+      etc; backslash normalization tested (test_05). is_safe_relative_path blocks
+      absolute + ../ in stage/unstage file args.
+[PASS] CSRF: POST requires application/json + (Origin OR Referer) from
+      localhost/127.0.0.1; malicious origin -> 403; missing both -> 400 (test_06).
+[PASS] Token hygiene: _scrub_remote_token resets origin.url to token-free HTTPS
+      after every push/pull (BUG#2 verified by test_push/pull_scrubs_token);
+      token redacted from exception strings (SEC-01); credentials isolated to
+      ephemeral HOME in tests (test_09, test_08#12).
+[PASS] Terminal: only `git` first-token allowed; GIT_BLOCKED_ARGS (-C, --git-dir,
+      etc.) rejected; shell=False; timeout enforced (test_11).
+[WARN] `except Exception: pass` in _scrub_remote_token (line 1173) means a config
+      write failure leaves the token in place silently. Low severity — the
+      scrub runs in a `finally` after the network call; a config write failure
+      is unlikely and the network URL already carried the token. Recommend
+      logging the failure rather than swallowing.
+
+--- AXIS 5: PERFORMANCE ---
+[PASS] test_04 benchmarks hardware + git/status endpoints (10 iterations each).
+      No assertions exceed 2s; report written to tests/performance_report.json
+      (gitignored). CPU daemon is a single daemon thread with cached float.
+
+--- VERDICT ---
+APPROVE. No Critical, no Required. One WARN (broad excepts) and one optional
+(scrub-failure logging). Code is behaviorally verified by 18 real tests, not
+tautologies — each test asserts on server output, and test_11 exercises a
+self-contained add+commit+log round-trip through the terminal.
+
+--- CHANGE LOG ---
+- .gitignore: add `docs/.scratch-audit/` (V2 audit scratch dir, per skill pitfall)
+- docs/plans/REVIEW-2026-09-12.txt: this report
