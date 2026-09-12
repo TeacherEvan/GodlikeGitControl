@@ -33,8 +33,8 @@ def cpu_polling_daemon():
         time.sleep(1.0)
         try:
             cached_cpu_pct = psutil.cpu_percent(interval=None)
-        except Exception:
-            pass
+        except Exception as e:
+            logging.exception("cpu_polling_daemon: failed to update CPU percentage")
 
 
 # Global lock to serialize git repository accesses (resolves F-01 concurrency issue)
@@ -76,7 +76,8 @@ def is_safe_path(path_str: Optional[str]) -> bool:
             if real_path == prefix or real_path.startswith(prefix + "/"):
                 return False
         return True
-    except Exception:
+    except Exception as e:
+        logging.exception("is_safe_path: failed to validate path %r", path_str)
         return False
 
 
@@ -119,7 +120,7 @@ def unstage_file(repo: Repo, path_str: Union[str, bytes]) -> None:
             index[path_bytes] = IndexEntry(
                 int(time.time()), int(time.time()), 0, 0, mode, 0, 0, 0, sha, 0
             )
-        except Exception:
+        except Exception as e:
             try:
                 del index[path_bytes]
             except KeyError:
@@ -155,7 +156,7 @@ def scan_for_repos(start_path: str, max_depth: int = 4) -> List[Dict[str, str]]:
                     "branch": branch,
                 }
             )
-        except Exception:
+        except Exception as e:
             pass
         return repos
 
@@ -178,7 +179,7 @@ def scan_for_repos(start_path: str, max_depth: int = 4) -> List[Dict[str, str]]:
                         "branch": branch,
                     }
                 )
-            except Exception:
+            except Exception as e:
                 pass
             dirs.remove(".git")
     return repos
@@ -228,7 +229,7 @@ def get_git_status(repo_path: str) -> Dict[str, Any]:
         r = Repo(repo_path)
         try:
             branch = porcelain.active_branch(r).decode("utf-8")
-        except Exception:
+        except Exception as e:
             branch = "DETACHED"
 
         st = porcelain.status(r)
@@ -325,7 +326,7 @@ def get_branch_graph(repo_path: str, max_commits: int = 100) -> Dict[str, Any]:
         branches = []
         try:
             head_sha = r.head().decode("utf-8")
-        except Exception:
+        except Exception as e:
             head_sha = None
 
         # Resolve the symbolic HEAD ref (refs/heads/<name>) so the active branch
@@ -340,7 +341,7 @@ def get_branch_graph(repo_path: str, max_commits: int = 100) -> Dict[str, Any]:
                 if isinstance(ref, bytes) and ref.startswith(b"refs/heads/"):
                     head_branch_name = ref[len(b"refs/heads/") :].decode("utf-8")
                     break
-        except Exception:
+        except Exception as e:
             head_branch_name = None
 
         for ref_name in r.refs.keys():
@@ -352,7 +353,7 @@ def get_branch_graph(repo_path: str, max_commits: int = 100) -> Dict[str, Any]:
             name = ref_bytes[len(b"refs/heads/") :].decode("utf-8")
             try:
                 sha = r.refs[ref_bytes].decode("utf-8")
-            except Exception:
+            except Exception as e:
                 continue
             branches.append(
                 {
@@ -448,7 +449,7 @@ def delete_branch(repo_path: str, name: str) -> None:
         # Prevent deleting the currently checked-out branch.
         try:
             active = porcelain.active_branch(r).decode("utf-8")
-        except Exception:
+        except Exception as e:
             active = "master"
         if name == active:
             raise Exception("Cannot delete the currently active branch")
@@ -553,7 +554,7 @@ def _get_cpu_freq() -> Optional[Dict[str, float]]:
                 "min": round(freq.min, 1) if freq.min else 0.0,
                 "max": round(freq.max, 1) if freq.max else 0.0,
             }
-    except Exception:
+    except Exception as e:
         pass
     return None
 
@@ -570,7 +571,7 @@ def _get_cpu_model() -> str:
                 for line in f:
                     if "model name" in line:
                         return line.split(":")[1].strip()
-        except Exception:
+        except Exception as e:
             pass
     return platform.processor() or "Generic Processor"
 
@@ -599,9 +600,9 @@ def _get_disk_info() -> List[Dict[str, Any]]:
                         "percent": usage.percent,
                     }
                 )
-            except Exception:
+            except Exception as e:
                 pass
-    except Exception:
+    except Exception as e:
         pass
     return disks
 
@@ -675,7 +676,7 @@ def load_saved_token() -> Optional[str]:
             with open(config_path, "r") as f:
                 data = json.load(f)
                 return data.get("token")
-        except Exception:
+        except Exception as e:
             pass
     return None
 
@@ -707,7 +708,7 @@ def save_token(token: str, remember_me: bool) -> None:
         if os.path.exists(config_path):
             try:
                 os.remove(config_path)
-            except Exception:
+            except Exception as e:
                 pass
 
 
@@ -719,7 +720,7 @@ def delete_saved_token() -> None:
     if os.path.exists(config_path):
         try:
             os.remove(config_path)
-        except Exception:
+        except Exception as e:
             pass
 
 
@@ -771,7 +772,7 @@ def _github_api(
         try:
             err_body = json.loads(e.read().decode("utf-8"))
             detail = err_body.get("message", reason)
-        except Exception:
+        except Exception as e:
             detail = reason
         raise Exception(f"GitHub API Error: {e.code} - {detail}")
     except Exception as e:
@@ -861,7 +862,7 @@ def get_repo_remote_url(repo_path: str) -> Optional[str]:
                 return url_bytes.decode("utf-8")
             except KeyError:
                 return None
-        except Exception:
+        except Exception as e:
             return None
 
 
@@ -911,11 +912,11 @@ def get_local_active_branch_and_sha(repo_path: str) -> Tuple[str, Optional[str]]
         try:
             active_branch_bytes = porcelain.active_branch(r)
             active_branch = active_branch_bytes.decode("utf-8")
-        except Exception:
+        except Exception as e:
             active_branch = "master"
         try:
             head_sha = r.head().decode("utf-8")
-        except Exception:
+        except Exception as e:
             head_sha = None
         return active_branch, head_sha
 
@@ -981,7 +982,7 @@ def is_ancestor(repo: Repo, ancestor_sha: str, descendant_sha: str) -> bool:
             except KeyError:
                 pass
         return False
-    except Exception:
+    except Exception as e:
         return False
 
 
@@ -1019,7 +1020,7 @@ def count_commits_between(repo: Repo, base_sha: str, target_sha: str) -> int:
             except KeyError:
                 pass
         return 1
-    except Exception:
+    except Exception as e:
         return 1
 
 
@@ -1197,7 +1198,7 @@ def _sync_with_github(repo_path: str, token: str, op: str) -> None:
         auth_url = _build_auth_url(parsed, token)
         try:
             branch_bytes = porcelain.active_branch(r)
-        except Exception:
+        except Exception as e:
             branch_bytes = b"master"
 
         refspec = f"refs/heads/{branch_bytes.decode('utf-8')}:refs/heads/{branch_bytes.decode('utf-8')}".encode(
@@ -1359,7 +1360,7 @@ class GitControlRequestHandler(http.server.SimpleHTTPRequestHandler):
             post_data = self.rfile.read(content_length)
             try:
                 body = json.loads(post_data.decode("utf-8")) if post_data else {}
-            except Exception:
+            except Exception as e:
                 body = {}
             self.handle_api_post(path, body)
         else:
@@ -1713,7 +1714,7 @@ class GitControlRequestHandler(http.server.SimpleHTTPRequestHandler):
             r = Repo(repo_path)
             try:
                 author = porcelain.get_user_identity(r.get_config_stack())
-            except Exception:
+            except Exception as e:
                 author = b"Godlike Controller <git@god.control>"
 
             porcelain.commit(r, message=message.encode("utf-8"), author=author)
