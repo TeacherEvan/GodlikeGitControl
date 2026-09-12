@@ -1,5 +1,6 @@
 import os
 import json
+import logging
 import urllib.parse
 import urllib.request
 import urllib.error
@@ -1158,8 +1159,8 @@ def _scrub_remote_token(repo_path: str, parsed: Dict[str, str]) -> None:
         )
         config.set((b"remote", b"origin"), b"url", clean_url)
         config.write_to_path()
-    except Exception:
-        pass
+    except Exception as exc:
+        logging.warning('token scrub failed for %s: %s', repo_path, exc)
 
 
 def _build_auth_url(parsed: Dict[str, str], token: str) -> str:
