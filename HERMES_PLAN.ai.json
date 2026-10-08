@@ -1,0 +1,40 @@
+{
+  "meta": {
+    "repo": "GodlikeGitControl",
+    "group": "Other",
+    "generated": "2026-08-15 18:55",
+    "branch": "main",
+    "commits": "19",
+    "lang": "Python",
+    "status": "proposed"
+  },
+  "items": [
+    {
+      "area": "GitHub",
+      "action": "Finish GitHub PAT integration (push/pull/publish/PR view) on main branch."
+    },
+    {
+      "area": "Desktop",
+      "action": "Harden pywebview launcher + installer scripts (install/reinstall/uninstall)."
+    },
+    {
+      "area": "Diff",
+      "action": "Keep line-by-line diff viewer + status badges accurate."
+    }
+  ],
+  "instructions": "GodlikeGitControl (Other): proposed workstreams. Agent reads HERMES_PLAN.html ticks: approve(a)=implement, change(c)=revisit/clarify, skip=ignore. Compact form below.",
+  "compact": [
+    {
+      "a": "G",
+      "summary": "Finish GitHub PAT integration (push/pull/publish/PR view) on main branch."
+    },
+    {
+      "a": "D",
+      "summary": "Harden pywebview launcher + installer scripts (install/reinstall/uninstall)."
+    },
+    {
+      "a": "D",
+      "summary": "Keep line-by-line diff viewer + status badges accurate."
+    }
+  ]
+}
